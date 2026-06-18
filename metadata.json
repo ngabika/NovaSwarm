@@ -1,0 +1,6 @@
+{
+  "name": "NovaSwarm",
+  "description": "Autonóm mesterséges intelligencia ágens csapat koordinációs felületeszköz, ami a Google Gemini 3-as széria API architektúráján és Telegram integráción alapul.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
