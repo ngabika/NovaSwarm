@@ -44,7 +44,8 @@ export function AgentChat({ agents, logs, onRefreshState }: AgentChatProps) {
         body: JSON.stringify(payload)
       });
       if (!res.ok) {
-        throw new Error("Sikertelen üzenetküldés az ágens részére.");
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Sikertelen üzenetküldés az ágens részére.");
       }
       onRefreshState();
     } catch (err: any) {
@@ -152,13 +153,15 @@ export function AgentChat({ agents, logs, onRefreshState }: AgentChatProps) {
               </button>
             </div>
 
-            {/* Simulated Banner Tip if Gemini API is missing (detected heuristically via mock answers) */}
-            <div className="bg-blue-950/30 border-b border-blue-900/30 px-5 py-2 flex items-center gap-2 text-xs text-blue-300">
-              <Info className="w-4 h-4 text-blue-400 flex-shrink-0" />
-              <span>
-                <strong>Interaktív Csevegő:</strong> Ha a Beállításokban nincs Gemini API kulcs mentve, az ágens valósághű szimulált válaszokat ad.
-              </span>
-            </div>
+            {/* Error notifications or general tips */}
+            {errorChat && (
+              <div className="bg-red-950/40 border-b border-red-900/50 px-5 py-3 text-xs text-red-400 flex items-start gap-2">
+                <Info className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                <span>
+                  <strong>Hiba történt:</strong> {errorChat}
+                </span>
+              </div>
+            )}
 
             {/* Chat Body Scroll */}
             <div className="flex-1 overflow-y-auto px-5 py-6 space-y-4 bg-slate-950/30">

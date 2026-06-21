@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+novaswarm-db.json
+novaswarm-db.json.bak
+.config

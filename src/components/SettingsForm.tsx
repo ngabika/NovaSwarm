@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Settings, ModelRateLimit } from "../types";
-import { MessageSquare, Save, Settings as SettingsIcon, AlertCircle, RefreshCw, Send, Sparkles, Cpu, ShieldCheck, Zap, AlertTriangle } from "lucide-react";
+import { MessageSquare, Save, Settings as SettingsIcon, AlertCircle, RefreshCw, Send, Sparkles, Cpu, ShieldCheck, Zap, AlertTriangle, Loader2, FileCode } from "lucide-react";
 
 interface SettingsFormProps {
   settings: Settings;
@@ -10,15 +10,90 @@ interface SettingsFormProps {
 }
 
 export function SettingsForm({ settings, modelLimits = [], onSaveSettings, onTestTelegram }: SettingsFormProps) {
+  const [configContent, setConfigContent] = useState("");
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configStatus, setConfigStatus] = useState("");
+  const [configSuccess, setConfigSuccess] = useState(true);
+
+  useEffect(() => {
+    fetchConfig();
+  }, []);
+
+  const fetchConfig = async () => {
+    setConfigLoading(true);
+    try {
+      const res = await fetch("/api/config-file");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.content) {
+          setConfigContent(data.content);
+        }
+      }
+    } catch (e) {
+      console.error("Hiba a .config betöltésekor:", e);
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
+  const handleSaveConfigDirect = async () => {
+    setConfigSaving(true);
+    setConfigStatus("");
+    try {
+      // client-side validation first
+      JSON.parse(configContent);
+      
+      const res = await fetch("/api/config-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: configContent })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setConfigSuccess(true);
+        setConfigStatus("A `.config` fájl sikeresen mentve lett és azonnal betöltődött a háttérben!");
+        // Sync states if settings changed
+        if (data.settings) {
+          if (data.settings.geminiApiKey) setGeminiApiKey(data.settings.geminiApiKey);
+          if (data.settings.openRouterApiKey) setOpenRouterApiKey(data.settings.openRouterApiKey);
+          if (data.settings.telegramBotToken) setTelegramBotToken(data.settings.telegramBotToken);
+          if (data.settings.telegramChatId) setTelegramChatId(data.settings.telegramChatId);
+          if (data.settings.checkIntervalSeconds) setCheckIntervalSeconds(Number(data.settings.checkIntervalSeconds));
+          if (data.settings.globalModelMode) setGlobalModelMode(data.settings.globalModelMode);
+          if (data.settings.binanceApiKey) setBinanceApiKey(data.settings.binanceApiKey);
+          if (data.settings.binanceApiSecret) setBinanceApiSecret(data.settings.binanceApiSecret);
+        }
+      } else {
+        throw new Error(data.error || "Sikertelen mentés");
+      }
+    } catch (err: any) {
+      setConfigSuccess(false);
+      setConfigStatus(`Hiba: ${err.message}`);
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
   const [geminiApiKey, setGeminiApiKey] = useState(settings.geminiApiKey || "");
+  const [openRouterApiKey, setOpenRouterApiKey] = useState(settings.openRouterApiKey || "");
   const [telegramBotToken, setTelegramBotToken] = useState(settings.telegramBotToken || "");
   const [telegramChatId, setTelegramChatId] = useState(settings.telegramChatId || "");
   const [isBotActive, setIsBotActive] = useState(settings.isBotActive);
   const [checkIntervalSeconds, setCheckIntervalSeconds] = useState(settings.checkIntervalSeconds || 30);
   const [globalModelMode, setGlobalModelMode] = useState(settings.globalModelMode || "auto");
+  const [geminiModelPriority, setGeminiModelPriority] = useState(settings.geminiModelPriority || "gemini-3.5-flash, gemini-3.1-flash-lite");
+  const [openRouterModelPriority, setOpenRouterModelPriority] = useState(settings.openRouterModelPriority || "google/gemini-2.5-flash:free, meta-llama/llama-3.3-70b-instruct:free, deepseek/deepseek-r1:free, meta-llama/llama-3-8b-instruct:free");
+  const [autoReorderModels, setAutoReorderModels] = useState(settings.autoReorderModels || false);
+  const [binanceApiKey, setBinanceApiKey] = useState(settings.binanceApiKey || "");
+  const [binanceApiSecret, setBinanceApiSecret] = useState(settings.binanceApiSecret || "");
+  const [binanceUseRealAccount, setBinanceUseRealAccount] = useState(settings.binanceUseRealAccount || false);
+  const [binanceStrategy, setBinanceStrategy] = useState(settings.binanceStrategy || "trend");
+  const [language, setLanguage] = useState(settings.language || "hu");
 
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [discoveringModels, setDiscoveringModels] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
   const [success, setSuccess] = useState(true);
 
@@ -29,19 +104,55 @@ export function SettingsForm({ settings, modelLimits = [], onSaveSettings, onTes
     try {
       await onSaveSettings({
         geminiApiKey,
+        openRouterApiKey,
         telegramBotToken,
         telegramChatId,
         isBotActive,
         checkIntervalSeconds: Number(checkIntervalSeconds),
-        globalModelMode
+        globalModelMode,
+        geminiModelPriority,
+        openRouterModelPriority,
+        autoReorderModels,
+        binanceApiKey,
+        binanceApiSecret,
+        binanceUseRealAccount,
+        binanceStrategy,
+        language
       });
       setSuccess(true);
-      setStatusMsg("A beállítások sikeresen mentve!");
+      setStatusMsg(language === "hu" ? "A beállítások sikeresen mentve!" : "Settings saved successfully!");
     } catch (err: any) {
       setSuccess(false);
       setStatusMsg(err.message || "Hiba történt a mentéskor.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAutoDiscoverModels = async () => {
+    setDiscoveringModels(true);
+    setStatusMsg("");
+    try {
+      const res = await fetch("/api/models/auto-refresh", { method: "POST" });
+      if (!res.ok) {
+        throw new Error("Lekérdezés sikertelen.");
+      }
+      const data = await res.json();
+      if (data.settings) {
+        if (data.settings.geminiModelPriority) {
+          setGeminiModelPriority(data.settings.geminiModelPriority);
+        }
+        if (data.settings.openRouterModelPriority) {
+          setOpenRouterModelPriority(data.settings.openRouterModelPriority);
+        }
+      }
+      setSuccess(true);
+      setStatusMsg("A modell-felfedező sikeresen lefutott! Lekérdeztük az OpenRouter aktuális legfrissebb ingyenes modelljeit, és frissítettük a prioritási sorrendet.");
+    } catch (err: any) {
+      setSuccess(false);
+      setStatusMsg(err.message || "Hiba történt az automatikus modellek lekérése közben.");
+    } finally {
+      setDiscoveringModels(false);
     }
   };
 
@@ -86,7 +197,45 @@ export function SettingsForm({ settings, modelLimits = [], onSaveSettings, onTes
         </div>
       )}
 
-      <form onSubmit={handleSave} className="bg-slate-800 border border-slate-700 rounded-xl p-6 space-y-6 shadow-xl">
+       <form onSubmit={handleSave} className="bg-slate-800 border border-slate-700 rounded-xl p-6 space-y-6 shadow-xl">
+        {/* Global Language Support Section */}
+        <div className="space-y-4 pb-4 border-b border-slate-700/60">
+          <h3 className="text-md font-medium text-white flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            ⚙️ Language / Rendszer Nyelve (Multi-Language Support)
+          </h3>
+          <div className="bg-slate-900/40 p-3.5 rounded-lg border border-slate-800 text-xs text-slate-400">
+            {language === "hu" ? (
+              <p>Megváltoztathatod a komplett NovaSwarm rendszer és az AI irányító felület nyelvét. Összesen 11 leggyakoribb világnyelv támogatott.</p>
+            ) : (
+              <p>You can change the language of the entire NovaSwarm interface and AI coordinator team. Supports 11 of the most popular languages globally.</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">
+              {language === "hu" ? "Kiválasztott Rendszernyelv" : "Select System Language"}
+            </label>
+            <select
+              id="select-system-language"
+              value={language}
+              onChange={e => setLanguage(e.target.value as any)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-emerald-500"
+            >
+              <option value="hu">Magyar (Hungarian)</option>
+              <option value="en">English (English)</option>
+              <option value="de">Deutsch (German)</option>
+              <option value="es">Español (Spanish)</option>
+              <option value="fr">Français (French)</option>
+              <option value="it">Italiano (Italian)</option>
+              <option value="pt">Português (Portuguese)</option>
+              <option value="ru">Русский (Russian)</option>
+              <option value="zh">中文 (Chinese)</option>
+              <option value="ja">日本語 (Japanese)</option>
+              <option value="ar">العربية (Arabic)</option>
+            </select>
+          </div>
+        </div>
+
         <div className="space-y-4">
           <h3 className="text-md font-medium text-white flex items-center gap-2 pb-2 border-b border-slate-700/60">
             <span className="w-2 h-2 rounded-full bg-blue-500"></span>
@@ -113,6 +262,33 @@ export function SettingsForm({ settings, modelLimits = [], onSaveSettings, onTes
               value={geminiApiKey}
               onChange={e => setGeminiApiKey(e.target.value)}
               className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-blue-500 font-mono placeholder:text-slate-550"
+            />
+          </div>
+        </div>
+
+        {/* Section 1.2 - OPENROUTER API KEY */}
+        <div className="space-y-4 pt-4 border-t border-slate-750">
+          <h3 className="text-md font-medium text-white flex items-center gap-2 pb-2 border-b border-slate-700/60">
+            <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+            1.2 OpenRouter.ai API Kulcs (Tartalék &amp; Alternatív Útvonal)
+          </h3>
+
+          <div className="bg-slate-900/60 border border-slate-800/80 p-4 rounded-xl text-xs text-slate-350 space-y-2">
+            <span className="font-semibold text-indigo-455 block">🛡️ Automatikus Átirányítás &amp; Maximum Uptime</span>
+            <p>
+              Ha a Google Gemini API korlátozva van (pl. ingyenes Rate-Limit miatt) vagy hálózati kimaradás történik, a rendszer automatikusan és észrevétlenül az <strong>OpenRouter.ai API</strong> ingyenes modelljeire tereli az ágensek működését. Sosem maradsz válasz nélkül!
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">OpenRouter API Kulcs</label>
+            <input
+              id="input-settings-openrouter-key"
+              type="password"
+              placeholder="Saját OpenRouter API Kulcs (opcionális)..."
+              value={openRouterApiKey}
+              onChange={e => setOpenRouterApiKey(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 font-mono placeholder:text-slate-550"
             />
           </div>
         </div>
@@ -236,6 +412,89 @@ export function SettingsForm({ settings, modelLimits = [], onSaveSettings, onTes
           </div>
         </div>
 
+        {/* Section 1.6 - CUSTOM FALLBACK PRIORITIES & AUTO-DISCOVERER */}
+        <div className="space-y-4 pt-4 border-t border-slate-750">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <h3 className="text-md font-medium text-white flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
+              1.6 Modell Prioritások és Intelligens Felfedező
+            </h3>
+            <button
+              id="btn-discover-models"
+              type="button"
+              onClick={handleAutoDiscoverModels}
+              disabled={discoveringModels}
+              className="px-4 py-2 bg-slate-900 border border-slate-700 hover:bg-slate-800 disabled:bg-slate-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer active:scale-95"
+            >
+              {discoveringModels ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  Szkennelés...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Frissítés és Ingyenes Modellek Felfedezése
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-xl text-xs text-slate-350 space-y-2.5">
+            <span className="font-semibold text-cyan-400 block">⚡ Dinamikus modell-fáradás elleni védelem</span>
+            <p className="leading-relaxed">
+              Ha az OpenAI, a Google vagy más szolgáltatók kivezetnének bizonyos ingyenes modelleket a piacról, itt te adhatod meg a pontos prioritási listát és sorrendet vesszővel elválasztva. A rendszer automatikusan fentről lefele haladva próbálja meg a kommunikációt.
+            </p>
+            <p className="leading-relaxed">
+              Az <strong>Ingyenes modellek felfedezése</strong> gomb segítségével a gép lekérdezi a legfrissebb OpenRouter katalógust, megkeresi a 100% ingyenes modelleket és automatikusan beállítja a prioritást az aktív, működő eszközökre!
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">Google Gemini Fallback Lánc (Vesszővel elválasztva)</label>
+              <input
+                id="input-gemini-priority"
+                type="text"
+                placeholder="Pl. gemini-3.5-flash, gemini-3.1-flash-lite"
+                value={geminiModelPriority}
+                onChange={e => setGeminiModelPriority(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">OpenRouter Fallback Lánc (Vesszővel elválasztva)</label>
+              <input
+                id="input-openrouter-priority"
+                type="text"
+                placeholder="Pl. google/gemini-2.1-flash:free, deepseek/deepseek-r1:free"
+                value={openRouterModelPriority}
+                onChange={e => setOpenRouterModelPriority(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 bg-slate-900/40 p-4 rounded-xl border border-slate-800">
+            <input
+              id="checkbox-auto-reorder-models"
+              type="checkbox"
+              checked={autoReorderModels}
+              onChange={e => setAutoReorderModels(e.target.checked)}
+              className="w-4 h-4 rounded text-cyan-500 bg-slate-900 border-slate-700 search-checkbox"
+            />
+            <div>
+              <label htmlFor="checkbox-auto-reorder-models" className="block text-xs font-bold text-slate-200 cursor-pointer">
+                Heti Automatikus Felfedezési Ciklus bekapcsolása (Weekly Explorer)
+              </label>
+              <span className="text-[10px] text-slate-400 block">
+                A rendszer hetente egyszer automatikusan felméri a piacon elérhető ingyenes modellek állapotát, és átrendezi a listát az alapján, hogy megjelent-e jobb vagy gazdaságosabb modell.
+              </span>
+            </div>
+          </div>
+        </div>
+
         <div className="space-y-4 pt-4 border-t border-slate-750">
           <h3 className="text-md font-medium text-white flex items-center gap-2 pb-2 border-b border-slate-700/60">
             <span className="w-2 h-2 rounded-full bg-sky-400"></span>
@@ -302,6 +561,117 @@ export function SettingsForm({ settings, modelLimits = [], onSaveSettings, onTes
               </button>
             )}
           </div>
+
+          <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-xl text-xs text-slate-300 space-y-3">
+            <span className="font-semibold text-cyan-400 block flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+              📢 Telegram Élő Parancskészlet (v1.2.0 Command &amp; Control)
+            </span>
+            <p className="text-slate-400 leading-relaxed">
+              Az elmentett paraméterekkel a Telegram botod közvetlen parancsközpontként funkcionál. Írd be a következő parancsokat a Telegram chaten az azonnali, valós idejű végrehajtáshoz és adateléréshez:
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-mono leading-relaxed pl-1 text-slate-350">
+              <div>
+                <span className="text-cyan-400">/egyenleg</span> - Binance portfólió egyenleg &amp; összérték
+              </div>
+              <div>
+                <span className="text-cyan-400">/statusz</span> - Rendszer &amp; ágensek részletes állapota
+              </div>
+              <div>
+                <span className="text-cyan-400">/almodozas_on</span> - Autonóm működés/Álmodozás aktiválás
+              </div>
+              <div>
+                <span className="text-cyan-450">/almodozas_off</span> - Autonóm működés felfüggesztése
+              </div>
+              <div>
+                <span className="text-cyan-400">/kanban</span> - Kanban kártyák és futó feladatok lekérése
+              </div>
+              <div>
+                <span className="text-cyan-400">/memoria</span> - Központi tények és mentett memóriák listázása
+              </div>
+              <div>
+                <span className="text-cyan-400">/modell</span> - Fallback prioritások, AI modellek lekérdezése
+              </div>
+              <div>
+                <span className="text-cyan-400">/keres &lt;kérdés&gt;</span> - Élő, internetes Deep Research azonnal!
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-500 italic pt-2 border-t border-slate-800/60">
+              💡 Minden parancs automatikusan, éles API-kon és valódi rendszermag lekérdezésekkel történik, bármiféle szimuláció, késleltetés vagy álcázás nélkül.
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-4 pt-4 border-t border-slate-750">
+          <h3 className="text-md font-medium text-white flex items-center gap-2 pb-2 border-b border-slate-700/60">
+            <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+            2.5 Binance API Kulcsok &amp; Titkos Kulcsok (Opcionális)
+          </h3>
+
+          <div className="bg-slate-900/60 border border-slate-800/80 p-4 rounded-xl text-xs text-slate-350 space-y-2">
+            <p className="font-semibold text-slate-200">📊 Elérhető a szimulációs és valós tőzsdei mód!</p>
+            <p>
+              Alapértelmezés szerint a **Binance Kereskedés** fül egy teljesen kockázatmentes, nagy teljesítményű szimulátorban fut, amely mentes a piaci veszteségektől.
+            </p>
+            <p className="text-slate-400">
+              Amennyiben az ágenseidnek (Attilának és Nórának) valós vagy BNB teszthálózati (Testnet) hozzáférést szeretnél adni a megbízások és számlaegyenleg szinkronizáláshoz, itt adhatod meg az API hozzáféréseidet:
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">Binance API Key</label>
+              <input
+                id="input-settings-binance-key"
+                type="password"
+                placeholder="Pl. vmPUZPr6uS4p01QC..."
+                value={binanceApiKey}
+                onChange={e => setBinanceApiKey(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-blue-500 font-mono placeholder:text-slate-550"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">Binance API Secret</label>
+              <input
+                id="input-settings-binance-secret"
+                type="password"
+                placeholder="Pl. 9S1dfbKLePvPsc82z..."
+                value={binanceApiSecret}
+                onChange={e => setBinanceApiSecret(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-blue-500 font-mono placeholder:text-slate-550"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">Kereskedési Környezet (Mód)</label>
+              <select
+                id="select-settings-binance-mode"
+                value={binanceUseRealAccount ? "real" : "demo"}
+                onChange={e => setBinanceUseRealAccount(e.target.value === "real")}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-yellow-500 font-medium"
+              >
+                <option value="demo">🕹️ Szoftveres Szimuláció (Kockázatmentes Demó)</option>
+                <option value="real">⚡ Valós / Éles Kereskedés (Saját API Kulccsal)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">Autonóm Kereskedési Stratégia</label>
+              <select
+                id="select-settings-binance-strategy"
+                value={binanceStrategy}
+                onChange={e => setBinanceStrategy(e.target.value as any)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-yellow-500 font-medium"
+              >
+                <option value="trend">📈 Trendkövető (Alapértelmezett)</option>
+                <option value="scalping">⚡ Skalpolás (Magas frekvenciájú mikro-tradek)</option>
+                <option value="hodl">💎 HODL Felhalmozás (Eladási megbízások letiltása)</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <div className="space-y-4 pt-4 border-t border-slate-750">
@@ -349,6 +719,76 @@ export function SettingsForm({ settings, modelLimits = [], onSaveSettings, onTes
           </button>
         </div>
       </form>
+
+      {/* Direct .config file editor as explicitly requested by user */}
+      <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 space-y-4 shadow-xl">
+        <h3 className="text-md font-medium text-white flex items-center gap-2 pb-2 border-b border-slate-700/60">
+          <FileCode className="w-5 h-5 text-amber-500" />
+          Közvetlen .config Fájl Szerkesztése
+        </h3>
+        <p className="text-xs text-slate-400">
+          Minden beállításod és API kulcsod egyetlen központi <code className="bg-slate-900 px-1 py-0.5 rounded text-amber-400">.config</code> fájlban van tárolva az alkalmazás gyökérkönyvtárában. Itt közvetlenül, nyers JSON formátumban is szerkesztheted.
+        </p>
+
+        {configStatus && (
+          <div
+            id="config-status-alert"
+            className={`p-3 rounded-lg text-xs border flex items-center gap-2 ${
+              configSuccess
+                ? "bg-emerald-950/40 text-emerald-300 border-emerald-800/80"
+                : "bg-red-950/40 text-red-400 border-red-800"
+            }`}
+          >
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <div>{configStatus}</div>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {configLoading ? (
+            <div className="flex items-center justify-center p-8 bg-slate-900 rounded-lg">
+              <Loader2 className="w-6 h-6 text-amber-500 animate-spin" />
+            </div>
+          ) : (
+            <textarea
+              id="textarea-config-content"
+              rows={12}
+              value={configContent}
+              onChange={e => setConfigContent(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-emerald-400 text-xs font-mono focus:outline-none focus:border-amber-500"
+              placeholder="{}"
+            />
+          )}
+        </div>
+
+        <div className="flex justify-between items-center bg-slate-900/40 p-3 rounded-lg border border-slate-750">
+          <button
+            id="btn-config-reload"
+            type="button"
+            onClick={fetchConfig}
+            disabled={configLoading}
+            className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition disabled:opacity-50"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Változtatások elvetése / Újratöltés
+          </button>
+
+          <button
+            id="btn-config-save-direct"
+            type="button"
+            onClick={handleSaveConfigDirect}
+            disabled={configSaving || configLoading}
+            className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-slate-950 font-semibold rounded-lg text-xs transition disabled:opacity-50 shadow-md"
+          >
+            {configSaving ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Save className="w-3.5 h-3.5" />
+            )}
+            Nyers .config Mentése
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

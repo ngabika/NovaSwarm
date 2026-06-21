@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { getTranslation, LanguageCode } from "./locales";
 import { DashboardState, Agent, KanbanCard, Memory, Settings, McpServer, AgentSkill } from "./types";
 import { Dashboard } from "./components/Dashboard";
 import { AgentsList } from "./components/AgentsList";
@@ -10,6 +11,9 @@ import { McpSkillsHub } from "./components/McpSkillsHub";
 import { DreamingSimulator } from "./components/DreamingSimulator";
 import { AgentChat } from "./components/AgentChat";
 import { BinanceDashboard } from "./components/BinanceDashboard";
+import { DocsOta } from "./components/DocsOta";
+import { DeepResearch } from "./components/DeepResearch";
+import SystemManager from "./components/SystemManager";
 import { 
   Sparkles, 
   BrainCircuit, 
@@ -23,7 +27,10 @@ import {
   RefreshCw,
   Cpu,
   MessageSquare,
-  TrendingUp
+  TrendingUp,
+  BookOpen,
+  Search,
+  Database
 } from "lucide-react";
 
 export default function App() {
@@ -278,6 +285,7 @@ export default function App() {
         return (
           <BinanceDashboard
             binanceState={state.binanceState}
+            settings={state.settings}
             onRefreshState={() => fetchState(true)}
           />
         );
@@ -298,16 +306,40 @@ export default function App() {
             onTestTelegram={handleTestTelegram}
           />
         );
+      case "docs_ota":
+        return (
+          <DocsOta
+            onRefreshState={() => fetchState(true)}
+            language={lang}
+          />
+        );
+      case "deep-research":
+        return (
+          <DeepResearch language={lang} />
+        );
+      case "system-mgmt":
+        return (
+          <SystemManager
+            backups={state.backups || []}
+            settings={state.settings}
+            onRefreshState={() => fetchState(true)}
+            language={lang === "hu" ? "hu" : "en"}
+          />
+        );
       default:
         return null;
     }
   };
 
+  const lang = (state?.settings?.language || "hu") as LanguageCode;
+
   if (loading && !state) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col justify-center items-center text-white space-y-3 font-sans">
         <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
-        <p className="text-sm font-semibold text-slate-400">NovaSwarm AI összeköttetés betöltése...</p>
+        <p className="text-sm font-semibold text-slate-400">
+          {lang === "hu" ? "NovaSwarm AI összeköttetés betöltése..." : "Loading NovaSwarm AI Connection..."}
+        </p>
       </div>
     );
   }
@@ -330,8 +362,8 @@ export default function App() {
                   Gemini Agent Swarm
                 </span>
               </div>
-              <p className="text-[10px] text-slate-450 uppercase tracking-widest font-mono">
-                Autonóm Multi-Agent Csapat Kezelő
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-mono">
+                {lang === "hu" ? "Autonóm Multi-Agent Csapat Kezelő" : "Autonomous Multi-Agent Swarm Manager"}
               </p>
             </div>
           </div>
@@ -340,14 +372,14 @@ export default function App() {
             {error && (
               <div className="hidden md:flex items-center gap-1.5 bg-red-950/40 border border-red-800 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-400">
                 <ShieldAlert className="w-4 h-4" />
-                Kapcsolat Hiba!
+                {lang === "hu" ? "Kapcsolat Hiba!" : "Connection Error!"}
               </div>
             )}
             <button
               id="btn-global-refresh"
               onClick={() => fetchState(false)}
               className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition flex items-center gap-1 text-xs"
-              title="Adatok kézi frissítése"
+              title={lang === "hu" ? "Adatok kézi frissítése" : "Manual Refresh"}
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin text-blue-400" : ""}`} />
             </button>
@@ -361,7 +393,7 @@ export default function App() {
           <div className="mb-6 bg-red-950/40 border border-red-800 p-4 rounded-xl text-sm text-red-400 flex items-center gap-3">
             <ShieldAlert className="w-5 h-5 flex-shrink-0" />
             <div>
-              <strong>Kommunikációs hiba:</strong> {error} - Ellenőrizd, hogy fut-e az Express kiszolgáló!
+              <strong>{lang === "hu" ? "Kommunikációs hiba:" : "Communication Error:"}</strong> {error} - {lang === "hu" ? "Ellenőrizd, hogy fut-e az Express kiszolgáló!" : "Make sure the Express server is running!"}
             </div>
           </div>
         )}
@@ -369,16 +401,19 @@ export default function App() {
         {/* Tab Selector Links */}
         <div className="bg-slate-950/40 border border-slate-800 p-1.5 rounded-xl flex flex-wrap gap-1 mb-6">
           {[
-            { id: "dashboard", label: "Műszerfal", icon: <LayoutDashboard className="w-4 h-4" /> },
-            { id: "agents", label: "AI Csapat", icon: <BrainCircuit className="w-4 h-4" /> },
-            { id: "chat", label: "Csevegés 💬", icon: <MessageSquare className="w-4 h-4 text-emerald-400" /> },
-            { id: "kanban", label: "Kanban Tábla", icon: <Columns className="w-4 h-4" /> },
-            { id: "memories", label: "Memóriatár", icon: <Brain className="w-4 h-4" /> },
-            { id: "mcp-skills", label: "MCP & Skillek", icon: <Cpu className="w-4 h-4" /> },
-            { id: "binance", label: "Binance Kereskedés 📈", icon: <TrendingUp className="w-4 h-4 text-yellow-500" /> },
-            { id: "dream", label: "Álmodozás ✨", icon: <Sparkles className="w-4 h-4 text-purple-400" /> },
-            { id: "logs", label: "Audit Napló", icon: <Terminal className="w-4 h-4" /> },
-            { id: "settings", label: "Beállítások", icon: <SettingsIcon className="w-4 h-4" /> }
+            { id: "dashboard", label: getTranslation(lang, "dashboard"), icon: <LayoutDashboard className="w-4 h-4" /> },
+            { id: "agents", label: getTranslation(lang, "agents"), icon: <BrainCircuit className="w-4 h-4" /> },
+            { id: "chat", label: lang === "hu" ? "Csevegés 💬" : "Chat 💬", icon: <MessageSquare className="w-4 h-4 text-emerald-400" /> },
+            { id: "kanban", label: getTranslation(lang, "kanban"), icon: <Columns className="w-4 h-4" /> },
+            { id: "memories", label: getTranslation(lang, "memories"), icon: <Brain className="w-4 h-4" /> },
+            { id: "mcp-skills", label: lang === "hu" ? "MCP & Skillek" : "MCP & Skills", icon: <Cpu className="w-4 h-4" /> },
+            { id: "binance", label: getTranslation(lang, "binance") + " 📈", icon: <TrendingUp className="w-4 h-4 text-yellow-500" /> },
+            { id: "dream", label: lang === "hu" ? "Álmodozás ✨" : "Dreaming ✨", icon: <Sparkles className="w-4 h-4 text-purple-400" /> },
+            { id: "deep-research", label: getTranslation(lang, "research") + " 🔍", icon: <Search className="w-4 h-4 text-cyan-400" /> },
+            { id: "logs", label: getTranslation(lang, "logs"), icon: <Terminal className="w-4 h-4" /> },
+            { id: "system-mgmt", label: lang === "hu" ? "Mentés & Rendszer 🛡️" : "Backup & System 🛡️", icon: <Database className="w-4 h-4 text-rose-450" /> },
+            { id: "docs_ota", label: lang === "hu" ? "Tudástár & OTA 📡" : "Knowledge Base & OTA 📡", icon: <BookOpen className="w-4 h-4 text-indigo-400" /> },
+            { id: "settings", label: getTranslation(lang, "settings"), icon: <SettingsIcon className="w-4 h-4" /> }
           ].map(tab => (
             <button
               id={`tab-button-${tab.id}`}
@@ -404,7 +439,7 @@ export default function App() {
 
       {/* Quiet minimal footer */}
       <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 py-6 border-t border-slate-850 text-center text-xs text-slate-500">
-        <p>NovaSwarm AI Collaboration Panel. Crafted under Gemini 3 Series system specifications.</p>
+        <p>NovaSwarm AI Collaboration Panel. Powered by Gemini 3.5. Fully Internationalized.</p>
       </footer>
     </div>
   );

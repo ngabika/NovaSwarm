@@ -2,11 +2,13 @@ export interface Agent {
   id: string;
   name: string;
   avatar: string;
-  role: 'boss' | 'tech_lead' | 'analyst' | 'writer' | 'legal' | 'trader' | 'news_analyst';
+  role: 'boss' | 'tech_lead' | 'analyst' | 'writer' | 'legal' | 'trader' | 'news_analyst' | 'system_operator';
   systemInstruction: string;
   model: string;
   active: boolean;
   lastActive?: string;
+  bossId?: string | null; // ID of the agent's boss
+  internetSearchEnabled?: boolean; // Enable real-time Google Search Grounding for the agent
 }
 
 export interface KanbanCard {
@@ -48,6 +50,7 @@ export interface ModelRateLimit {
 
 export interface Settings {
   geminiApiKey: string;
+  openRouterApiKey?: string;
   telegramBotToken: string;
   telegramChatId: string;
   isBotActive: boolean;
@@ -55,6 +58,32 @@ export interface Settings {
   checkIntervalSeconds: number;
   lastRunTime?: string;
   globalModelMode?: string; // "auto" | "gemini-3.5-flash" | "gemini-3.1-pro-preview" | etc.
+  geminiModelPriority?: string; // Comma separated priority string
+  openRouterModelPriority?: string; // Comma separated priority string
+  autoReorderModels?: boolean; // Weekly auto refresh active mode
+  binanceApiKey?: string;
+  binanceApiSecret?: string;
+  binanceUseRealAccount?: boolean;
+  binanceStrategy?: 'scalping' | 'trend' | 'hodl';
+  language?: 'hu' | 'en' | 'de' | 'es' | 'fr' | 'it' | 'pt' | 'ru' | 'zh' | 'ja' | 'ar';
+  backupSchedule?: 'daily' | 'weekly' | 'monthly' | 'manual';
+  backupLocalPath?: string;
+  backupGDriveEnabled?: boolean;
+  backupGDriveFolderId?: string;
+  autoUpdateOSAndPkgs?: boolean;
+  autoDeployNewSkills?: boolean;
+}
+
+export interface BackupItem {
+  id: string;
+  timestamp: string;
+  fileName: string;
+  size: string;
+  localPath: string;
+  isGDriveSynced: boolean;
+  status: 'success' | 'failed';
+  type: 'auto' | 'manual';
+  reason?: string;
 }
 
 export interface McpServer {
@@ -100,10 +129,18 @@ export interface BinanceTrade {
 
 export interface BinanceState {
   balanceUsdt: number;
+  balanceEur: number;
+  balanceFdusd: number;
+  balanceUsdc: number;
   balanceBtc: number;
   balanceSol: number;
+  balanceEth: number;
+  balanceBnb: number;
   btcPrice: number;
   solPrice: number;
+  ethPrice: number;
+  bnbPrice: number;
+  eurPrice: number; // 1 EUR in USD (e.g. 1.08)
   sentiment: number;
   recentTrades: BinanceTrade[];
   newsSignal?: {
@@ -128,4 +165,5 @@ export interface DashboardState {
   currentDream?: DreamState;
   modelLimits?: ModelRateLimit[];
   binanceState?: BinanceState;
+  backups?: BackupItem[];
 }

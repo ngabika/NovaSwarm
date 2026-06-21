@@ -17,7 +17,9 @@ export function AgentsList({ agents, onSaveAgent, onDeleteAgent }: AgentsListPro
   const [formAvatar, setFormAvatar] = useState("🤖");
   const [formRole, setFormRole] = useState<Agent['role']>("writer");
   const [formInstruction, setFormInstruction] = useState("");
-  const [formModel, setFormModel] = useState<'gemini-3.5-flash' | 'gemini-3.1-pro-preview'>("gemini-3.5-flash");
+  const [formModel, setFormModel] = useState<string>("gemini-3.5-flash");
+  const [formBossId, setFormBossId] = useState<string>("");
+  const [formInternetSearchEnabled, setFormInternetSearchEnabled] = useState(true);
 
   const startEdit = (agent: Agent) => {
     setEditingAgent(agent);
@@ -27,6 +29,8 @@ export function AgentsList({ agents, onSaveAgent, onDeleteAgent }: AgentsListPro
     setFormRole(agent.role);
     setFormInstruction(agent.systemInstruction);
     setFormModel(agent.model);
+    setFormBossId(agent.bossId || "");
+    setFormInternetSearchEnabled(agent.internetSearchEnabled !== false);
     setError("");
   };
 
@@ -38,6 +42,8 @@ export function AgentsList({ agents, onSaveAgent, onDeleteAgent }: AgentsListPro
     setFormRole("writer");
     setFormInstruction("");
     setFormModel("gemini-3.5-flash");
+    setFormBossId("");
+    setFormInternetSearchEnabled(true);
     setError("");
   };
 
@@ -56,6 +62,8 @@ export function AgentsList({ agents, onSaveAgent, onDeleteAgent }: AgentsListPro
         systemInstruction: formInstruction,
         model: formModel,
         active: editingAgent ? editingAgent.active : true,
+        bossId: formBossId || null,
+        internetSearchEnabled: formInternetSearchEnabled,
       };
 
       if (editingAgent) {
@@ -116,7 +124,7 @@ export function AgentsList({ agents, onSaveAgent, onDeleteAgent }: AgentsListPro
 
           {error && <div className="p-3 bg-red-950/40 text-red-400 text-sm rounded-lg border border-red-800">{error}</div>}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1">Ágens Neve</label>
               <input
@@ -161,6 +169,26 @@ export function AgentsList({ agents, onSaveAgent, onDeleteAgent }: AgentsListPro
                 <option value="legal">Legal (Jogi / Compliance)</option>
                 <option value="writer">Content Writer (Copywriting)</option>
                 <option value="analyst">Data Analyst (Adatvizsgálat)</option>
+                <option value="system_operator">System Operator (Rendszerüzemeltetés / IT Biztonság)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Felettes (Főnök)</label>
+              <select
+                id="select-agent-boss"
+                value={formBossId}
+                onChange={e => setFormBossId(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:border-blue-500 font-medium"
+              >
+                <option value="">-- Nincs felettes (Önálló) --</option>
+                {agents
+                  .filter(a => !editingAgent || a.id !== editingAgent.id)
+                  .map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.avatar} {a.name} ({a.role})
+                    </option>
+                  ))}
               </select>
             </div>
           </div>
@@ -171,11 +199,13 @@ export function AgentsList({ agents, onSaveAgent, onDeleteAgent }: AgentsListPro
               <select
                 id="select-agent-model"
                 value={formModel}
-                onChange={e => setFormModel(e.target.value as any)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:border-blue-500"
+                onChange={e => setFormModel(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:border-blue-500 font-medium"
               >
                 <option value="gemini-3.5-flash">Gemini 3.5 Flash (Gyors &amp; Biztonságos)</option>
-                <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Haladó okfejtés - Paid model)</option>
+                <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Pehelysúlyú)</option>
+                <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Haladó okfejtés)</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Kísérleti haladó)</option>
               </select>
             </div>
             <div className="flex bg-blue-950/20 border border-blue-900/60 p-3 rounded-lg text-xs text-blue-300 gap-2 items-start">
@@ -183,6 +213,24 @@ export function AgentsList({ agents, onSaveAgent, onDeleteAgent }: AgentsListPro
               <div>
                 Rendszer utasítása szabályozza az AI ügynök teljes viselkedését, stílusát, nyelvezetét és döntéshozatali módszertanát az autonóm ciklus lefutásakor.
               </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 bg-indigo-950/20 p-3.5 rounded-xl border border-indigo-900/40">
+            <input
+              id="checkbox-internet-search-enabled"
+              type="checkbox"
+              checked={formInternetSearchEnabled}
+              onChange={e => setFormInternetSearchEnabled(e.target.checked)}
+              className="w-4 h-4 rounded text-indigo-500 bg-slate-900 border-slate-705 cursor-pointer accent-indigo-500"
+            />
+            <div>
+              <label htmlFor="checkbox-internet-search-enabled" className="block text-xs font-bold text-slate-200 cursor-pointer">
+                🌐 Google Search Grounding (Élő Internetes Keresés Engedélyezése)
+              </label>
+              <span className="text-[10px] text-slate-400 block">
+                Ha aktív és kompatibilis Gemini modellt használ, az ágens automatikusan lekéri az internetet a Google-on keresztül elemzéseihez és döntéseihez.
+              </span>
             </div>
           </div>
 
@@ -238,11 +286,21 @@ export function AgentsList({ agents, onSaveAgent, onDeleteAgent }: AgentsListPro
                     {agent.avatar || "🤖"}
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-white flex items-center gap-2 flex-wrap">
                       {agent.name}
                       <span className="text-xs font-normal bg-slate-700/60 text-slate-350 px-2 py-0.5 rounded-full capitalize">
                         {agent.role}
                       </span>
+                      {agent.bossId && (
+                        (() => {
+                          const bossObj = agents.find(a => a.id === agent.bossId);
+                          return bossObj ? (
+                            <span className="text-[11px] font-medium bg-indigo-950/80 text-indigo-300 border border-indigo-800/80 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <span>👔</span> Felettes: {bossObj.name}
+                            </span>
+                          ) : null;
+                        })()
+                      )}
                     </h3>
                     <p className="text-[11px] text-slate-500 font-mono mt-0.5">{agent.id}</p>
                   </div>
@@ -294,9 +352,19 @@ export function AgentsList({ agents, onSaveAgent, onDeleteAgent }: AgentsListPro
             </div>
 
             <div className="flex justify-between items-center bg-slate-900/40 p-2.5 rounded-lg border border-slate-700/40 text-[11px] font-mono text-slate-400">
-              <div>
-                <span className="text-slate-500">Modell:</span>{" "}
-                <span className="text-amber-400 font-semibold">{agent.model}</span>
+              <div className="flex flex-col gap-0.5">
+                <div>
+                  <span className="text-slate-500">Modell:</span>{" "}
+                  <span className="text-amber-400 font-semibold">{agent.model}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Internet:</span>{" "}
+                  {agent.internetSearchEnabled !== false ? (
+                    <span className="text-emerald-400 font-bold">🌐 AKTÍV (Live Search)</span>
+                  ) : (
+                    <span className="text-slate-550">Kikapcsolva</span>
+                  )}
+                </div>
               </div>
               <div>
                 <span className="text-slate-500">Utoljára aktív:</span>{" "}

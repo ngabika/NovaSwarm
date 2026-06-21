@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   RefreshCw
 } from "lucide-react";
+import { getTranslation, LanguageCode } from "../locales";
 
 interface DashboardProps {
   agents: Agent[];
@@ -32,6 +33,7 @@ interface DashboardProps {
   lastRunTime?: string;
   onToggleSystem: (active: boolean) => Promise<void>;
   onTriggerTick: () => Promise<void>;
+  language?: string;
 }
 
 export function Dashboard({
@@ -43,20 +45,24 @@ export function Dashboard({
   telegramConnected,
   lastRunTime,
   onToggleSystem,
-  onTriggerTick
+  onTriggerTick,
+  language
 }: DashboardProps) {
+  const lang = (language || "hu") as LanguageCode;
   const activeAgents = agents.filter(a => a.active);
   const totalTasks = kanbanCards.length;
   const todoTasks = kanbanCards.filter(c => c.status === "todo").length;
   const inProgressTasks = kanbanCards.filter(c => c.status === "in_progress").length;
   const completedTasks = kanbanCards.filter(c => c.status === "done").length;
 
+  const isHu = lang === "hu";
+
   // Live Hardware Telemetry state
   const [hardware, setHardware] = useState({
-    battery: "Nem lekérdezhető",
+    battery: isHu ? "Nem lekérdezhető" : "Not queryable",
     temp: "42.0°C",
-    resources: "RAM szabad: 1530 MB, Lemez: 28% foglalt",
-    usbDevices: "Felderítés folyamatban..."
+    resources: isHu ? "RAM szabad: 1530 MB, Lemez: 28% foglalt" : "RAM free: 1530 MB, Disk: 28% capacity",
+    usbDevices: isHu ? "Felderítés folyamatban..." : "Discovery in progress..."
   });
   const [hwLoading, setHwLoading] = useState(true);
 
@@ -78,7 +84,7 @@ export function Dashboard({
         setHardware(data);
       }
     } catch (e) {
-      console.error("Failed to query hardware telemetry:", e);
+      console.warn("Failed to query hardware telemetry quietly (endpoint may be offline):", e);
     } finally {
       setHwLoading(false);
     }
@@ -90,7 +96,7 @@ export function Dashboard({
     return () => clearInterval(interval);
   }, []);
 
-  // Client-side Hungarian Voice Synthesis Hook
+  // Client-side Multi-language Voice Synthesis Hook
   useEffect(() => {
     if (!clientSpeech || logs.length === 0) return;
     
@@ -109,24 +115,50 @@ export function Dashboard({
         if (typeof window !== "undefined" && window.speechSynthesis) {
           window.speechSynthesis.cancel();
           const cleanText = log.message.replace(/[*_#`[\]()]/g, "").substring(0, 200);
-          const utterance = new SpeechSynthesisUtterance(`Üzenet tőle: ${log.agentName}. ${cleanText}`);
-          utterance.lang = "hu-HU";
+          
+          let speakPrefix = `Message from ${log.agentName}: `;
+          if (lang === "hu") speakPrefix = `Üzenet tőle: ${log.agentName}. `;
+          else if (lang === "de") speakPrefix = `Nachricht von ${log.agentName}: `;
+          else if (lang === "es") speakPrefix = `Mensaje de ${log.agentName}: `;
+          else if (lang === "fr") speakPrefix = `Message de ${log.agentName}: `;
+          else if (lang === "it") speakPrefix = `Messaggio da ${log.agentName}: `;
+          else if (lang === "pt") speakPrefix = `Mensagem de ${log.agentName}: `;
+          else if (lang === "ru") speakPrefix = `Сообщение от ${log.agentName}: `;
+          else if (lang === "zh") speakPrefix = `来自 ${log.agentName} 的消息: `;
+          else if (lang === "ja") speakPrefix = `${log.agentName} からのメッセージ: `;
+          else if (lang === "ar") speakPrefix = `رسالة من ${log.agentName}: `;
+
+          const utterance = new SpeechSynthesisUtterance(`${speakPrefix}${cleanText}`);
+          
+          const speechLangCode = lang === "hu" ? "hu-HU" :
+                                 lang === "de" ? "de-DE" :
+                                 lang === "es" ? "es-ES" :
+                                 lang === "fr" ? "fr-FR" :
+                                 lang === "it" ? "it-IT" :
+                                 lang === "pt" ? "pt-PT" :
+                                 lang === "ru" ? "ru-RU" :
+                                 lang === "zh" ? "zh-CN" :
+                                 lang === "ja" ? "ja-JP" :
+                                 lang === "ar" ? "ar-SA" : "en-US";
+          utterance.lang = speechLangCode;
           
           const voices = window.speechSynthesis.getVoices();
-          const huVoice = voices.find(v => v.lang.startsWith("hu"));
-          if (huVoice) {
-            utterance.voice = huVoice;
+          const targetVoice = voices.find(v => v.lang.slice(0, 2).toLowerCase() === lang);
+          if (targetVoice) {
+            utterance.voice = targetVoice;
           }
           window.speechSynthesis.speak(utterance);
         }
       }
     });
-  }, [logs, clientSpeech]);
+  }, [logs, clientSpeech, lang]);
 
   // Handle manual trigger of Self-Healing Compiler
   const handleTriggerSelfHeal = async () => {
     setHealingState("running");
-    setHealingLog("Kompiláló és TypeScript típus-ellenőrzés elindítása...");
+    setHealingLog(
+      isHu ? "Kompiláló és TypeScript típus-ellenőrzés elindítása..." : "Starting compiler and TypeScript type checks..."
+    );
     setFixedFile("");
     
     try {
@@ -135,24 +167,85 @@ export function Dashboard({
       
       if (data.success && data.result.success) {
         setHealingState("success");
-        setHealingLog(data.result.log || "Rendszer stabil, nincs hiba!");
+        setHealingLog(
+          data.result.log || (isHu ? "Rendszer stabil, nincs hiba!" : "System stable, no errors found!")
+        );
         setFixedFile(data.result.fileFixed || "");
       } else {
         setHealingState("error");
         setHealingLog(
           data.result?.log || 
           data.error || 
-          "Fordítási hibák keletkeztek amiket az AI-nak nem sikerült automatikusan elhárítania."
+          (isHu ? "Fordítási hibák keletkeztek amiket az AI-nak nem sikerült automatikusan elhárítania." : "Build errors arose that the AI could not autogenously repair.")
         );
       }
     } catch (e: any) {
       setHealingState("error");
-      setHealingLog("Önjavítási lekérdezés hálózati kommunikációs hibával megszakadt: " + e.message);
+      setHealingLog(
+        isHu 
+          ? "Önjavítási lekérdezés hálózati kommunikációs hibával megszakadt: " + e.message
+          : "Self-healing query disconnected due to a network communication error: " + e.message
+      );
     }
   };
 
   const getRecentLogs = () => {
     return logs.slice(0, 6);
+  };
+
+  const dTexts = {
+    title: isHu ? "Önfejlesztő & Önjavító AI Kiszolgáló" : "Self-Improving & Self-Healing AI Server",
+    desc: isHu 
+      ? "A NovaSwarm eléri a fizikai laptop és saját kódja feletti teljes root irányítást. Az ügynökök képesek érzékelni a gép hőmérsékletét, akkumulátorát, és hálózati hibák esetén **önállóan kódolni**, fordítási teszteket végezni, javítani hibás fájljaikat!"
+      : "NovaSwarm achieves full root control over the physical laptop and its own codebase. Agents monitor temperature, battery status, and in case of network or build errors, **code autonomously** to run checks and self-heal files!",
+    stopBtn: isHu ? "Swarm Leállítása" : "Stop Swarm",
+    startBtn: isHu ? "Swarm Indítása" : "Start Swarm",
+    tickBtn: isHu ? "Ciklus Triggere (Tick)" : "Trigger Tick Cycle",
+    tickBtnTitle: isHu ? "Kézi futtatás" : "Manual Trigger",
+    
+    activeMembers: isHu ? "Aktív AI Csapattagok" : "Active AI Swarm Members",
+    kanbanActiveText: isHu ? "Kanban Feladat (Folyamatban)" : "Kanban Tasks (In Progress)",
+    cpuTempText: isHu ? "Laptop CPU Hőmérséklet" : "Laptop CPU Temperature",
+    serverPowerText: isHu ? "Szervergép Tápellátás" : "Server Host Power Status",
+
+    laptopSensorsTitle: isHu ? "Szervergép Laptop Szenzorok" : "Server Physical Laptop Sensors",
+    batteryLabel: isHu ? "Akkumulátor:" : "Battery Status:",
+    tempLabel: isHu ? "Hőfok & Magok:" : "Temperature & Cores:",
+    resourcesLabel: isHu ? "Erőforrások:" : "System Resources:",
+    hardwareLabel: isHu ? "Hardverek:" : "USB Hardware:",
+    sysInfoText: isHu 
+      ? "Rendszerünk közvetlen kapcsolatban áll a Linux Mint backend Kernel `/sys` fájlrendszerével és szenzor hálózattal, óvva a laptopot a töltéshiánytól és a túlhevüléstől."
+      : "Linked directly to the Linux Kernel `/sys` filesystem and sensor diagnostics to avoid battery drain, core damage, or overheating.",
+
+    voiceTitle: isHu ? "Fizikai Hangvezérlés & Bemondás" : "Browser Text-to-Speech (TTS)",
+    voiceToggleLabel: isHu ? "Böngésző szóbeli felolvasás (Hungarian TTS)" : "Synthesize Autonomous Thoughts & Speech",
+    voiceToggleDesc: isHu
+      ? "Ha az ágensek hoznak egy döntést, megírnak egy kódot vagy gondolnak valamit, a böngésződön keresztül élőszóban is bemondják!"
+      : "Speech synthesis translates and reads thoughts, actions, and key decisions aloud on this device in your system language!",
+    voiceOnTitle: isHu ? "Hangosítás bekapcsolva" : "Mute speaker",
+    voiceOffTitle: isHu ? "Hangosítás kikapcsolva" : "Enable voice",
+    speakerTTSHeading: isHu ? "🔈 Gazdagép Loudspeaker TTS:" : "🔈 Host Loudspeaker TTS:",
+    speakerTTSDesc: isHu
+      ? "Ha a Mint szerver gép rendelkezik saját hangszóróval, az ágensek a gazda operációs rendszer spd-say és espeak-ng szolgáltatását is közvetlenül meghívják a fizikai jelenlét érdekében!"
+      : "If the Linux host machine has speakers, the agents can use low-level shell services (such as spd-say and espeak-ng) for real-world ambient speech synthesis!",
+
+    selfHealTitle: isHu ? "Önjavító & Önkódoló Ellenőr" : "Autonomous Self-Healing Auditor",
+    selfHealDesc: isHu
+      ? "Ha az AI kísérleti kódjai vagy parancsai során szintaktikai hiba lépne fel a projektben, ez az önkódoló tesztelő hurok automatikusan beavatkozik."
+      : "If compilation, linting, or runtime syntax failures are detected in our codebase, this self-correcting loop intercepts and repairs them on-the-fly.",
+    selfHealIdle: isHu ? "Nincs aktív kódvizsgálat futtatás." : "No active self-heal audit currently running.",
+    selfHealCheckStatus: isHu ? "Fordítás állapotának ellenőrzése..." : "Auditing project build structure...",
+    selfHealStable: isHu ? "Rendszer fordítási állapot stabil!" : "System build integrity is stable!",
+    selfHealFixedFile: isHu ? "Sikeresen javított fájl: " : "Automatically restored file: ",
+    selfHealDetectedErrors: isHu ? "Hibás fordítási kódokat találtunk!" : "Found code syntax errors!",
+    selfHealTriggerBtn: isHu ? "Önjavító (Self-Heal Audit) Kézi Futtatása" : "Run Self-Healing Verification Manual Audit",
+
+    recentActivitiesTitle: isHu ? "Legutóbbi AI Aktivitások & Kód Változások" : "Recent Swarm Actions & Code Milestones",
+    systemLogsTitle: isHu ? "Rendszernaplók és Önjavítás" : "System & Optimization Feed",
+    noLogsAvailable: isHu ? "Még nincs elérhető napló bejegyzés." : "No action logs or telemetry insights recorded yet.",
+    auditLogsFooter: isHu 
+      ? "Minden aktivitást és részletes önjavító gondolatmenetet az **Audit Napló** tabon követhetsz."
+      : "All deep reasoning sequences, terminal executions, and diagnostic traces are persisted on the Audit Logs tab."
   };
 
   return (
@@ -166,23 +259,21 @@ export function Dashboard({
             ✨ NOVASWARM + PHYSICAL LAPTOP AUTONOMY
           </span>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white font-sans mt-2">
-            Önfejlesztő &amp; Önjavító AI Kiszolgáló
+            {dTexts.title}
           </h1>
-          <p className="text-sm text-slate-350 leading-relaxed font-sans">
-            A NovaSwarm eléri a fizikai laptop és saját kódja feletti teljes root irányítást. 
-            Az ügynökök képesek érzékelni a gép hőmérsékletét, akkumulátorát, és hálózati hibák esetén **önállóan kódolni**, fordítási teszteket végezni, javítani hibás fájljaikat!
+          <p className="text-sm text-slate-350 leading-relaxed font-sans" dangerouslySetInnerHTML={{ __html: dTexts.desc }}>
           </p>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 relative w-full md:w-auto">
           {systemRunning ? (
             <button
-              id="btn-system-stop"
-              onClick={() => onToggleSystem(false)}
-              className="flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-semibold px-5 py-3 rounded-xl shadow-lg transition transform active:scale-95 w-full sm:w-auto text-sm"
+               id="btn-system-stop"
+               onClick={() => onToggleSystem(false)}
+               className="flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-semibold px-5 py-3 rounded-xl shadow-lg transition transform active:scale-95 w-full sm:w-auto text-sm"
             >
               <Square className="w-4 h-4 fill-white" />
-              Swarm Leállítása
+              {dTexts.stopBtn}
             </button>
           ) : (
             <button
@@ -191,7 +282,7 @@ export function Dashboard({
               className="flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-semibold px-5 py-3 rounded-xl shadow-lg transition transform active:scale-95 w-full sm:w-auto text-sm"
             >
               <Play className="w-4 h-4 fill-white animate-pulse" />
-              Swarm Indítása
+              {dTexts.startBtn}
             </button>
           )}
 
@@ -199,10 +290,10 @@ export function Dashboard({
             id="btn-trigger-tick"
             onClick={onTriggerTick}
             className="flex items-center justify-center gap-2 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 hover:text-white px-5 py-3 rounded-xl transition w-full sm:w-auto text-sm font-semibold"
-            title="Kézi futtatás"
+            title={dTexts.tickBtnTitle}
           >
             <FastForward className="w-4 h-4 text-indigo-400 animate-bounce" />
-            Ciklus Triggere (Tick)
+            {dTexts.tickBtn}
           </button>
         </div>
       </div>
@@ -216,7 +307,7 @@ export function Dashboard({
           </div>
           <div>
             <div className="text-2xl font-bold text-white font-mono">{activeAgents.length} / {agents.length}</div>
-            <div className="text-xs font-medium text-slate-400 font-sans mt-0.5">Aktív AI Csapattagok</div>
+            <div className="text-xs font-medium text-slate-400 font-sans mt-0.5">{dTexts.activeMembers}</div>
           </div>
         </div>
 
@@ -227,7 +318,7 @@ export function Dashboard({
           </div>
           <div>
             <div className="text-2xl font-bold text-white font-mono">{inProgressTasks} / {totalTasks}</div>
-            <div className="text-xs font-medium text-slate-400 font-sans mt-0.5">Kanban Feladat (Folyamatban)</div>
+            <div className="text-xs font-medium text-slate-400 font-sans mt-0.5">{dTexts.kanbanActiveText}</div>
           </div>
         </div>
 
@@ -238,7 +329,7 @@ export function Dashboard({
           </div>
           <div>
             <div className="text-2xl font-bold text-white font-mono">{hardware.temp}</div>
-            <div className="text-xs font-medium text-slate-400 font-sans mt-0.5">Laptop CPU Hőmérséklet</div>
+            <div className="text-xs font-medium text-slate-400 font-sans mt-0.5">{dTexts.cpuTempText}</div>
           </div>
         </div>
 
@@ -249,7 +340,7 @@ export function Dashboard({
           </div>
           <div>
             <div className="text-2xl font-bold text-white text-sm font-mono truncate max-w-[150px]">{hardware.battery}</div>
-            <div className="text-xs font-medium text-slate-400 font-sans mt-1">Szervergép Tápellátás</div>
+            <div className="text-xs font-medium text-slate-400 font-sans mt-1">{dTexts.serverPowerText}</div>
           </div>
         </div>
       </div>
@@ -262,14 +353,14 @@ export function Dashboard({
           <div className="bg-slate-800 border border-slate-755 rounded-2xl p-5 space-y-4 shadow-lg">
             <h3 className="text-sm font-bold text-white flex items-center gap-2 pb-2 border-b border-slate-700/60">
               <Cpu className="w-4 h-4 text-amber-400" />
-              Szervergép Laptop Szenzorok
+              {dTexts.laptopSensorsTitle}
             </h3>
             
             <div className="space-y-3.5 text-xs">
               <div className="flex justify-between items-start gap-4">
                 <span className="text-slate-400 flex items-center gap-1.5 min-w-[100px]">
                   <Battery className="w-3.5 h-3.5 text-emerald-400" />
-                  Akkumulátor:
+                  {dTexts.batteryLabel}
                 </span>
                 <span className="text-slate-200 font-mono text-right font-medium">
                   {hardware.battery}
@@ -279,7 +370,7 @@ export function Dashboard({
               <div className="flex justify-between items-start gap-4">
                 <span className="text-slate-400 flex items-center gap-1.5 min-w-[100px]">
                   <Cpu className="w-3.5 h-3.5 text-rose-400" />
-                  Hőfok &amp; Magok:
+                  {dTexts.tempLabel}
                 </span>
                 <span className="text-slate-200 font-mono text-right font-medium">
                   {hardware.temp}
@@ -289,7 +380,7 @@ export function Dashboard({
               <div className="flex justify-between items-start gap-4">
                 <span className="text-slate-400 flex items-center gap-1.5 min-w-[100px]">
                   <HardDrive className="w-3.5 h-3.5 text-blue-400" />
-                  Erőforrások:
+                  {dTexts.resourcesLabel}
                 </span>
                 <span className="text-slate-250 font-mono text-right text-[10px] bg-slate-900 border border-slate-800 p-1.5 rounded w-full">
                   {hardware.resources}
@@ -299,7 +390,7 @@ export function Dashboard({
               <div className="flex justify-between items-start gap-4">
                 <span className="text-slate-400 flex items-center gap-1.5 min-w-[100px]">
                   <Terminal className="w-3.5 h-3.5 text-amber-400" />
-                  Hardverek:
+                  {dTexts.hardwareLabel}
                 </span>
                 <span className="text-indigo-300 font-mono text-right text-[11px] truncate max-w-[200px]" title={hardware.usbDevices}>
                   {hardware.usbDevices}
@@ -310,7 +401,7 @@ export function Dashboard({
             <div className="bg-indigo-950/30 rounded-xl p-3 border border-indigo-900/40 text-xs text-indigo-350 leading-relaxed flex gap-2">
               <span className="text-indigo-400 font-bold block mt-0.5">ℹ️</span>
               <p>
-                Rendszerünk közvetlen kapcsolatban áll a Linux Mint backend Kernel `/sys` fájlrendszerével és szenzor hálózattal, óvva a laptopot a töltéshiánytól és a túlhevüléstől.
+                {dTexts.sysInfoText}
               </p>
             </div>
           </div>
@@ -319,14 +410,14 @@ export function Dashboard({
           <div className="bg-slate-800 border border-slate-755 rounded-2xl p-5 space-y-4 shadow-lg">
             <h3 className="text-sm font-bold text-white flex items-center gap-2 pb-2 border-b border-slate-700/60">
               <Volume2 className="w-4 h-4 text-emerald-400" />
-              Fizikai Hangvezérlés &amp; Bemondás
+              {dTexts.voiceTitle}
             </h3>
 
             <div className="flex items-center justify-between bg-slate-900 p-3.5 rounded-xl border border-slate-750">
               <div className="space-y-1 pr-4">
-                <div className="text-xs font-semibold text-white">Böngésző szóbeli felolvasás (Hungarian TTS)</div>
+                <div className="text-xs font-semibold text-white">{dTexts.voiceToggleLabel}</div>
                 <div className="text-[11px] text-slate-400 leading-normal">
-                  Ha az ágensek hoznak egy döntést, megírnak egy kódot vagy gondolnak valamit, a böngésződön keresztül élőszóban is bemondják!
+                  {dTexts.voiceToggleDesc}
                 </div>
               </div>
               <button
@@ -337,16 +428,16 @@ export function Dashboard({
                     ? "bg-emerald-950/40 border-emerald-800 text-emerald-400" 
                     : "bg-slate-850 border-slate-700 text-slate-400"
                 }`}
-                title={clientSpeech ? "Hangosítás bekapcsolva" : "Hangosítás kikapcsolva"}
+                title={clientSpeech ? dTexts.voiceOnTitle : dTexts.voiceOffTitle}
               >
                 {clientSpeech ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
               </button>
             </div>
 
             <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-850 text-xs text-slate-400 space-y-1.5 leading-relaxed">
-              <p className="font-semibold text-slate-300">🔈 Gazdagép Loudspeaker TTS:</p>
+              <p className="font-semibold text-slate-300">{dTexts.speakerTTSHeading}</p>
               <p>
-                Ha a Mint szerver gép rendelkezik saját hangszóróval, az ágensek a gazda operációs rendszer <span className="font-mono text-slate-200">spd-say</span> és <span className="font-mono text-slate-200">espeak-ng</span> szolgáltatását is közvetlenül meghívják a fizikai jelenlét érdekében!
+                {dTexts.speakerTTSDesc}
               </p>
             </div>
           </div>
@@ -356,7 +447,7 @@ export function Dashboard({
             <h3 className="text-sm font-bold text-white flex items-center justify-between pb-2 border-b border-slate-700/60">
               <div className="flex items-center gap-2">
                 <Wrench className="w-4 h-4 text-indigo-400" />
-                Önjavító &amp; Önkódoló Ellenőr
+                {dTexts.selfHealTitle}
               </div>
               <span className="text-[9px] bg-slate-900 border border-slate-700 px-1.5 py-0.5 rounded text-amber-400 font-mono uppercase">
                 Active Loop
@@ -365,12 +456,12 @@ export function Dashboard({
 
             <div className="space-y-4">
               <p className="text-xs text-slate-350 leading-relaxed">
-                Ha az AI kísérleti kódjai vagy parancsai során szintaktikai hiba lépne fel a projektben, ez az önkódoló tesztelő hurok automatikusan beavatkozik.
+                {dTexts.selfHealDesc}
               </p>
 
               {healingState === "idle" && (
                 <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 text-center py-6">
-                  <div className="text-xs text-slate-400">Nincs aktív kódvizsgálat futtatás.</div>
+                  <div className="text-xs text-slate-400">{dTexts.selfHealIdle}</div>
                 </div>
               )}
 
@@ -378,7 +469,7 @@ export function Dashboard({
                 <div className="bg-slate-900 p-4 rounded-xl border border-indigo-900/40 space-y-3">
                   <div className="flex items-center gap-2 text-xs text-indigo-400 font-semibold">
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    Fordítás állapotának ellenőrzése...
+                    {dTexts.selfHealCheckStatus}
                   </div>
                   <p className="text-[11px] font-mono text-slate-300 bg-slate-950 p-2 rounded truncate">
                     {healingLog}
@@ -390,14 +481,14 @@ export function Dashboard({
                 <div className="bg-emerald-950/20 p-4 rounded-xl border border-emerald-900/50 space-y-2">
                   <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold">
                     <Check className="w-4 h-4" />
-                    Rendszer fordítási állapot stabil!
+                    {dTexts.selfHealStable}
                   </div>
                   <p className="text-[11px] text-slate-300 leading-normal">
                     {healingLog}
                   </p>
                   {fixedFile && (
                     <div className="text-[10px] text-emerald-300 font-mono bg-emerald-950/60 px-2 py-1 rounded inline-block">
-                      Sikeresen javított fájl: {fixedFile}
+                      {dTexts.selfHealFixedFile}{fixedFile}
                     </div>
                   )}
                 </div>
@@ -407,7 +498,7 @@ export function Dashboard({
                 <div className="bg-red-950/20 p-4 rounded-xl border border-red-900/50 space-y-2">
                   <div className="flex items-center gap-2 text-xs text-red-500 font-semibold">
                     <AlertTriangle className="w-4 h-4" />
-                    Hibás fordítási kódokat találtunk!
+                    {dTexts.selfHealDetectedErrors}
                   </div>
                   <div className="text-[10px] font-mono text-red-300 bg-slate-950 p-2 rounded max-h-[120px] overflow-y-auto whitespace-pre-wrap">
                     {healingLog}
@@ -422,7 +513,7 @@ export function Dashboard({
                 className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-700 to-indigo-850 hover:from-indigo-650 hover:to-indigo-800 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow transition active:scale-98"
               >
                 <Wrench className="w-4 h-4" />
-                Önjavító (Self-Heal Audit) Kézi Futtatása
+                {dTexts.selfHealTriggerBtn}
               </button>
             </div>
           </div>
@@ -435,7 +526,7 @@ export function Dashboard({
             <h3 className="text-md font-bold text-white flex items-center justify-between pb-2 border-b border-slate-700/60">
               <div className="flex items-center gap-2 font-sans text-sm">
                 <List className="w-4 h-4 text-indigo-400" />
-                Legutóbbi AI Aktivitások &amp; Kód Változások
+                {dTexts.recentActivitiesTitle}
               </div>
               <span className="text-[10px] bg-slate-900 px-2.5 py-1 rounded border border-slate-750 text-slate-400 uppercase font-mono tracking-wider">
                 System and Code Logs
@@ -445,7 +536,7 @@ export function Dashboard({
             <div className="mt-3 divide-y divide-slate-750/40">
               {getRecentLogs().length === 0 ? (
                 <div className="text-slate-550 text-center py-12 text-sm italic font-mono">
-                  Még nincs elérhető napló bejegyzés.
+                  {dTexts.noLogsAvailable}
                 </div>
               ) : (
                 getRecentLogs().map(log => {
@@ -483,7 +574,7 @@ export function Dashboard({
           </div>
 
           <div className="text-right pt-4 border-t border-slate-750/30 mt-4 text-xs">
-            <span className="text-slate-500 italic">Minden aktivitást és részletes önjavító gondolatmenetet az **Audit Napló** tabon követhetsz.</span>
+            <span className="text-slate-500 italic" dangerouslySetInnerHTML={{ __html: dTexts.auditLogsFooter }}></span>
           </div>
         </div>
       </div>
