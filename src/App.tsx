@@ -1,3 +1,4 @@
+// Made by AI for AI with Google AI Studio prompted by ngabika
 import React, { useState, useEffect } from "react";
 import { getTranslation, LanguageCode } from "./locales";
 import { DashboardState, Agent, KanbanCard, Memory, Settings, McpServer, AgentSkill } from "./types";
@@ -407,7 +408,9 @@ export default function App() {
             { id: "kanban", label: getTranslation(lang, "kanban"), icon: <Columns className="w-4 h-4" /> },
             { id: "memories", label: getTranslation(lang, "memories"), icon: <Brain className="w-4 h-4" /> },
             { id: "mcp-skills", label: lang === "hu" ? "MCP & Skillek" : "MCP & Skills", icon: <Cpu className="w-4 h-4" /> },
-            { id: "binance", label: getTranslation(lang, "binance") + " 📈", icon: <TrendingUp className="w-4 h-4 text-yellow-500" /> },
+            ...(state?.settings?.binanceEnabled
+              ? [{ id: "binance", label: getTranslation(lang, "binance") + " 📈", icon: <TrendingUp className="w-4 h-4 text-yellow-500" /> }]
+              : []),
             { id: "dream", label: lang === "hu" ? "Álmodozás ✨" : "Dreaming ✨", icon: <Sparkles className="w-4 h-4 text-purple-400" /> },
             { id: "deep-research", label: getTranslation(lang, "research") + " 🔍", icon: <Search className="w-4 h-4 text-cyan-400" /> },
             { id: "logs", label: getTranslation(lang, "logs"), icon: <Terminal className="w-4 h-4" /> },

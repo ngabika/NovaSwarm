@@ -79,7 +79,7 @@ export function DreamingSimulator({
             Ágensek Álmodozási Fázisa (Dreaming Mode)
           </h2>
           <p className="text-slate-300 text-sm leading-relaxed">
-            Az álom fázisban az ágensek belső kognitív szimulációkat futtatnak a meglévő audit logok, memóriák és korábbi Kanban feladatok alapján. Ez alatt önállóan hoznak létre új ágens képességeket (Skilleket), fedeznek fel külső eszközcsatlakozásokat (MCP) és szintetizálnak mélyebb összefüggéseket a memóriatárba.
+            Az álom fázisban az ágensek belső kognitív reflexiókat futtatnak a meglévő audit logok, memóriák és korábbi Kanban feladatok alapján. Ez alatt önállóan hoznak létre új ágens képességeket (Skilleket), fedeznek fel külső eszközcsatlakozásokat (MCP) és szintetizálnak mélyebb összefüggéseket a memóriatárba.
           </p>
         </div>
       </div>

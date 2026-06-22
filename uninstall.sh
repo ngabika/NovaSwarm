@@ -4,7 +4,7 @@
 #                  NOVASWARM AI INTERAKTÍV ELTÁVOLÍTÓ PARANCSFÁJL
 # ==============================================================================
 # Támogatott OS: Helyi Linux Mint / Ubuntu / Debian alapú disztribúciók
-# Kiadás: v1.3.0 STABLE (Magyar verzió)
+# Kiadás: v2.0.0 STABLE (Magyar verzió)
 # Privilégiumok: Szükség esetén 'sudo' a systemd szolgáltatás törléséhez.
 # ==============================================================================
 

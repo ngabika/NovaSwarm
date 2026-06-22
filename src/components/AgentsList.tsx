@@ -170,6 +170,7 @@ export function AgentsList({ agents, onSaveAgent, onDeleteAgent }: AgentsListPro
                 <option value="writer">Content Writer (Copywriting)</option>
                 <option value="analyst">Data Analyst (Adatvizsgálat)</option>
                 <option value="system_operator">System Operator (Rendszerüzemeltetés / IT Biztonság)</option>
+                <option value="auditor">Auditor (Grounding Supervisor / Ellenőr)</option>
               </select>
             </div>
 

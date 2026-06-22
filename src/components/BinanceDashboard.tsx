@@ -108,7 +108,7 @@ export function BinanceDashboard({ binanceState, settings, onRefreshState }: Bin
         <AlertTriangle className="w-8 h-8 text-amber-500 animate-pulse" />
         <h3 className="text-sm font-bold text-slate-350">Binance modul nincsen inicializálva...</h3>
         <p className="text-xs text-slate-500 max-w-sm">
-          A Binance szimulációs motor jelenleg nem érhető el. Kérlek indítsd el vagy frissítsd a rendszert!
+          A Binance papírkereskedési motor jelenleg nem érhető el. Kérlek indítsd el vagy frissítsd a rendszert!
         </p>
       </div>
     );
@@ -149,7 +149,7 @@ export function BinanceDashboard({ binanceState, settings, onRefreshState }: Bin
           A Binance Kereskedési felület és az elemzések használatához kérlek add meg az érvényes <strong>Binance API Kulcsot (API Key)</strong> és <strong>Titkos Kulcsot (API Secret)</strong> a <strong>Menedzsment Beállítások</strong> panelen!
         </p>
         <p className="text-[10px] text-slate-500 italic max-w-xs leading-relaxed">
-          A szoftver biztonsági okokból nem teszi lehetővé a szimulált tőzsdei működést érvényes API kulcsok hiányában.
+          A szoftver biztonsági okokból nem teszi lehetővé a papírkereskedési és API alapú működést érvényes API kulcsok hiányában.
         </p>
       </div>
     );
@@ -195,7 +195,7 @@ export function BinanceDashboard({ binanceState, settings, onRefreshState }: Bin
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Hiba történt a szimulált Binance tranzakció futtatásakor.");
+        throw new Error(data.error || "Hiba történt a papírkereskedési tranzakció futtatásakor.");
       }
 
       setTradeSuccess(`Sikeres ${tradeType === "BUY" ? "vásárlás" : "eladás"}! Tranzakció rögzítve.`);
@@ -209,12 +209,12 @@ export function BinanceDashboard({ binanceState, settings, onRefreshState }: Bin
   };
 
   const handleResetPortfolio = async () => {
-    if (!confirm("Biztosan alaphelyzetbe állítod a szimulált többdevizás Binance sporttárcát? (Visszaáll európai alapértelmezett EUR és stablecoin egyenlegekre)")) return;
+    if (!confirm("Biztosan alaphelyzetbe állítod a papírkereskedési többdevizás Binance sporttárcát? (Visszaáll európai alapértelmezett EUR és stablecoin egyenlegekre)")) return;
     setExecuting(true);
     try {
       const res = await fetch("/api/binance/reset", { method: "POST" });
       if (!res.ok) throw new Error("Sikertelen tárca reset.");
-      setTradeSuccess("A szimulált európai Binance tárca sikeresen alaphelyzetbe állítva!");
+      setTradeSuccess("A teszt európai Binance tárca sikeresen alaphelyzetbe állítva!");
       onRefreshState();
     } catch (err: any) {
       setTradeError(err.message || "Hiba az egyenlegek törlésekor.");
@@ -513,7 +513,7 @@ export function BinanceDashboard({ binanceState, settings, onRefreshState }: Bin
                   <Cpu className="w-4 h-4 text-amber-500" />
                   Kereskedési Robot Beépített Stratégia-Visszatesztelő (Backtester)
                 </h4>
-                <p className="text-[10px] text-slate-500 mt-0.5">Teszteld az algoritmikus stratégiákat múltbéli piaci adatokon szimulálva</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">Teszteld az algoritmikus stratégiákat múltbéli piaci adatokon végrehajtva</p>
               </div>
               <span className="text-[9px] bg-slate-900 text-amber-400 font-mono font-bold px-2 py-0.5 rounded border border-slate-800">
                 PRO SIMULATOR
@@ -575,7 +575,7 @@ export function BinanceDashboard({ binanceState, settings, onRefreshState }: Bin
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-bold text-white">Algoritmus futtatása történelmi gyertyaadatokon...</p>
-                  <p className="text-[10px] text-slate-500 font-mono">Binance Spot market depth szoftveres iteráció: {backtestPeriod} nap szimulációja</p>
+                  <p className="text-[10px] text-slate-500 font-mono">Binance Spot market depth szoftveres iteráció: {backtestPeriod} nap tesztje</p>
                 </div>
               </div>
             )}
@@ -672,14 +672,14 @@ export function BinanceDashboard({ binanceState, settings, onRefreshState }: Bin
 
                   <div className="flex justify-between items-center text-[9px] text-slate-500 font-mono">
                     <span>Indulás (Biztonságos tőke)</span>
-                    <span>Szimuláció vége (Szoftveres profit: +${backtestResults.netProfit.toLocaleString()})</span>
+                    <span>Visszateszt vége (Szoftveres profit: +${backtestResults.netProfit.toLocaleString()})</span>
                   </div>
                 </div>
 
                 <div className="text-[10px] bg-slate-900/50 p-2.5 rounded-lg border border-slate-850/60 flex items-start gap-1.5 text-slate-400">
                   <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                   <span>
-                    <strong>Visszajelzés:</strong> A választott stratégiával a tőzsdei díjak fizetése után a szimulált profit <strong>${backtestResults.netProfit.toLocaleString()} USD</strong>. 
+                    <strong>Visszajelzés:</strong> A választott stratégiával a tőzsdei díjak fizetése után a várható profit <strong>${backtestResults.netProfit.toLocaleString()} USD</strong>. 
                     A maximális visszaesés <strong>{backtestResults.maxDrawdown}%</strong>, ami kezelhető kockázatot jelent a megadott időhorizonton.
                   </span>
                 </div>

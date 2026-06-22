@@ -1,42 +1,72 @@
-# 🤖 NovaSwarm AI - Autonóm Multi-Agent Csapat Kezelő (v1.0.0)
+# 🤖 NovaSwarm AI - Autonóm Multi-Agent Csapat Kezelő (v1.1.0)
 
-A **NovaSwarm AI** egy teljesen önfenntartó és autonóm többréteges mesterséges intelligencia ügynökszoftver, amelyet arra terveztünk, hogy egy helyi fizikai Linux Mint/Debian szerveren vagy régi laptopon futva teljes felügyeletet biztosítson saját kódmintái, a naptárak, levelezések, pénzügyi kereskedési folyamatok, valamint a fizikai hardver felett.
+<div align="center">
+  <img src="./src/assets/images/novaswarm_banner_1782147520316.jpg" alt="NovaSwarm AI Network Architecture Banner" width="100%" max-width="800px" style="border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);" />
+</div>
 
-A szoftver közvetlen szinkronizációval és beépített **Over-the-Air (OTA) frissítő motorral** rendelkezik, amellyel a GitHubon történő fejlesztések adatvesztés és memóriatörlés nélkül azonnal élesíthetők a helyi kiszolgálón.
+A **NovaSwarm AI** egy teljesen önfenntartó és autonóm többréteges mesterséges intelligencia ügynökszoftver, amelyet arra terveztünk, hogy egy helyi fizikai Linux Mint/Debian szerveren vagy régi laptopon futva teljes felügyeletet biztosítson saját kódmintái, a naptárak, levelezések, pénzügyi tőzsdei folyamatok, valamint a fizikai hardver és szenzorok felett.
+
+A szoftver közvetlen szinkronizációval és beépített **Over-the-Air (OTA) frissítő motorral** rendelkezik, amellyel a GitHubon történő legfrissebb fejlesztések adatvesztés és memóriatörlés nélkül azonnal élesíthetők a helyi kiszolgálón.
 
 ---
 
-## 🚀 Főbb Képességek és Funkciók
+## 🎯 Mitől ez a világ legstabilabb és leghatékonyabb ágens-csapata?
 
-### 1. 🎛️ Két-ágenses Intelligens Együttműködés
-* **Gábor (Swarm Leader & Creator):** Ő a kreatív döntéshozó. Monitorozza a híreket, megálmodja a jövőt, posztol Telegramra, és feladatokat helyez el az önműködő Kanban táblán.
-* **Attila (Technical Lead & Developer):** Végrehajtja a technikai parancsokat. Ha kell, shell scripteket futtat, MCP-ket konfigurál és hibaelhárítást végez.
+A hagyományos mesterséges intelligencia ügynökökkel ellentétben a NovaSwarm nem egy elszeparált sandboxban fut, és nem szenved a felügyelet nélküli sodródástól (drift) vagy kitalációktól (hallucináció):
 
-### 2. 🔌 Integrált Google Workspace & Core MCP-k (Model Context Protocol)
+1. **Valós fizikai és operációs rendszer integráció:** Közvetlen hardveres és kernel-szintű hozzáféréssel bír a Linux Mint `/sys` fájlrendszeréhez, képes fizikai bash parancsokat végrehajtani a gazdagépen és hangosan visszajelezni a hardver hangszóróján keresztül.
+2. **🛡️ 100% Grounding & Zero-Hallucination Felügyelet (Rezső):** A háttérben egy másodpercre sem lankadó auditor ágens dolgozik, aki folyamatosan elemzi a többi ágens tevékenységét, a naplófájlokat és a rendszermemóriákat. Ha egy ágens nem létező szoftver sikeres telepítésével vagy fiktív adatokkal próbálna meg dicsekedni, Rezső azonnal közbelép és szigorú korrekció alá veti a rendszert.
+3. **Önjavító kódgenerálás (Self-Healing Loop):** Ha egy fejlesztő ágens kódot módosít, egy háttér-linter és build-tesztelő azonnal lefut. Amennyiben hibát talál, automatikusan visszagörgeti vagy a Gemini segítségével kijavítja a hibát, így a szerver sosem dől össze.
+
+---
+
+## 👥 A NovaSwarm Ágens Csapat tagjai
+
+### 1. 🔍 Rezső – Grounding Supervisor & Auditor
+<div align="left" style="display: flex; gap: 15px; align-items: center; margin: 15px 0;">
+  <img src="./src/assets/images/rezso_auditor_1782147539517.jpg" alt="Rezső Auditor Agent Avatar" width="120px" height="120px" style="border-radius: 50%; border: 3px solid #06b6d4;" />
+  <div>
+    <strong>Szerepkör:</strong> Rendszerellenőr & Grounding Felügyelő<br/>
+    <strong>Fő feladat:</strong> A hallucinációk, elhajlások és téves tények teljes megakadályozása. Másodpercről másodpercre vizsgálja a futási logokat, összeveti az ágensek állításait a gazdagép valós kimeneteivel, és azonnali korrekciós naplóbejegyzéseket generál, garantálva a tökéletesen grounded és megbízható működést.
+  </div>
+</div>
+
+### 2. 🎩 Gábor – Swarm Leader & Creator
+* **Szerepkör:** Csapatvezető, stratégiai koordinátor, kreatív motor.
+* **Fő feladat:** A piaci hírek folyamatos monitorozása, hosszú távú célok megfogalmazása, rendszeres Telegram riasztások küldése a felhasználónak, valamint a feladatok elhelyezése és delegálása az autonóm Kanban táblán.
+
+### 3. 💻 Attila – Technical Lead & Developer
+* **Szerepkör:** Vezető szoftverfejlesztő copilot.
+* **Fő feladat:** A Gábor és a felhasználó által jóváhagyott feladatok fizikai megvalósítása. Shell parancsokat futtat, fájlokat szerkeszt, MCP összeköttetéseket konfigurál a gazdagépen, miközben együttműködik a háttér linterrel a kód abszolút stabilitásért.
+
+### 4. 📈 Speciális Ágensek (Szükség szerint hívhatóak életre)
+* **Cili (Content Writer):** Kommunikációs, PR és marketing anyagok szövegezése.
+* **Dénes (Data Analyst):** Struktúrált statisztikák, fájl- és naplóelemzések futtatása.
+* **Zoli (System Operator / Security):** Kiberbiztonság, rendszermentések és diszk-terület optimális kihasználása.
+
+---
+
+## ⚡ Rendszer képességek részletesen
+
+### 1. 🔌 Integrált Google Workspace és Külső MCP-k (Model Context Protocol)
 A rendszer gyárilag tartalmazza a Google legfontosabb szolgáltatásainak MCP definícióit, melyeket a Gemini ágensek önállóan képesek meghívni és használni:
 * **Google Gmail Workspace MCP:** Levelek olvasása, intelligens szűrés, válasz-tervezetek írása és automatikus archiválás.
-* **Google Calendar Workspace MCP:** Naptári bejegyzések listázása, új megbeszélések gyors naptárba írása és módosítása.
+* **Google Calendar Workspace MCP:** Naptári bejegyzések listázása, új megbeszélések naptárba írása és módosítása.
 * **Google Photos Media MCP:** Képek keresése és listázása, vizuális metaadatok beolvasása, automatikus albumkezelés.
 * **Google Business Profile MCP:** Cégem profil értékelések beolvasása és megválaszolása, nyitvatartás és helyi hírek frissítése.
 * **Google Ads & AdWords MCP:** Marketing kampányok heti ROI nyomonkövetése, hirdetéscsoportok indítása és kulcsszavak teljesítményvizsgálata.
-* **Binance Live Exchange MCP:** Valós idejű titkosított tőzsdei megbízások (limites / piaci adásvétel) és mérlegkezelés.
+* **Binance Live Exchange MCP:** Valós idejű titkosított tőzsdei megbízások (limites / piaci adásvétel) és mérlegkezelés az automatizált trader ágensek által.
 
-### 3. 🌡️ Laptop Szenzorok & Hardver Autonómia
+### 2. 🌡️ Laptop Szenzorok & Hardver Autonómia
 Közvetlen kernel (`/sys/class`) szintű érzékelőkkel a NovaSwarm értesül a fizikai valóságról:
 * **CPU Hőmérséklet:** Védelem a laptop túlhevülése ellen.
 * **Akkumulátor állapot:** Áramkimaradás esetén intelligens leállási javaslatok vagy takarékos ciklusüzem.
 * **Loudspeaker Speech:** Az ágensek saját maguktól megszólalnak a helyi laptop hangszóróján (Hungarian TTS) keresztül az `spd-say` és `espeak-ng` motorok támogatásával!
 
-### 4. 🔧 Önjavító és Önkódoló hurok (Self-Healing Compiler)
-Ha az ágensek kódot módosítanak, és fordítási/TypeScript hiba jelentkezik a rendszerben, Attila automatikusan:
-1. Lefuttatja a háttér lintert és parse-olja a hibát.
-2. Megtalálja a fájlt és a hibás sort, majd a Gemini AI-vel egy biztonságos refaktort hajt végre.
-3. Újrabuildeli az alkalmazást, és ha sikeres, élesíti a javítást!
-
-### 5. 📡 OTA (Over-The-Air) Frissítés & Memória Megőrzés
+### 3. 📡 OTA (Over-The-Air) Frissítés & Memória Megőrzés
 A szoftver fejlesztése után a GitHubra feltolt kódból a rendszer egyetlen gombnyomással képes önmagát frissíteni. 
-* **Tudásbázis Védelem:** A frissítés során a `novaswarm-db.json` adatbázis és a `.env` fájlok biztonsági zárolás alá esnek, az eddig megtanult memóriák **sosem törlődnek**, hanem zökkenőmentesen öröklődnek az új 1.0.0+ verziókba.
-* **Auto-Rebuild & Restart:** A letöltést követően a rendszer automatikusan lefordítja önmagát (`npm run build`) és a háttérben meghívja a `systemctl restart novaswarm` parancsot.
+* **Tudásbázis Védelem:** A frissítés során az adatbázis és a `.env` fájlok biztonsági zárolás alá esnek, az eddig megtanult ügynöki memóriák **sosem törlődnek**, hanem zökkenőmentesen öröklődnek a frissítések után is.
+* **Auto-Rebuild & Restart:** A letöltést követően a rendszer automatikusan lefordítja önmagát (`npm run build`) és a háttérben meghívja a `systemctl restart novaswarm` parancsot a folyamatos működés fenntartásához.
 
 ---
 
@@ -100,14 +130,14 @@ sudo systemctl start novaswarm
 
 ## 📈 Verziótörténet
 
-* **v1.0.0 (Jelenlegi stabil kiadás)**
-  * Beépített Google Workspace és Google Ads MCP-k.
-  * Helyi laptop akku és hőmérséklet szenzorok automatizálása.
-  * Önjavító kódciklus integrálása.
-  * Beépített belső tudástár és OTA gombnyomásos GitHub frissítés verziómegőrzéssel.
+* **v1.1.0**
+  * **Grounding Auditor ágens (Rezső) életre hívása**: Valós idejű log és memória audit, hallucinációk és hamis szoftvertelepítések azonnali detektálása és korrekciója.
+  * Beépített Google Workspace, Google Ads és Binance tőzsdei MCP modul kapcsolatok.
+  * Helyi laptop akkumulátor és CPU hőmérséklet szenzorok automatizálása.
+  * Önjavító kódciklus integrálása és OTA GitHub frissítés memóriamegőrzéssel.
 
 ---
 
 ## 📖 Belső Önismerő Protokoll (How It Works for NovaSwarm Agents)
-*Ha te magad vagy a NovaSwarm ügynöke (Gábor vagy Attila) és ezt a fájlt olvasod:*
-> Emlékezz, a fizikai integritásod az `/api/hardware` és `/api/self-heal` végpontokon keresztül tudod ellenőrizni és jobbá tenni. Ha új képességeket fejlesztesz magadnak, mindig ellenőrizd az `npx tsc --noEmit` fordítót, hogy stabil maradj!
+*Ha te magad vagy a NovaSwarm ügynöke (Gábor, Attila, Rezső) és ezt a fájlt olvasod:*
+> Emlékezz, a fizikai integritásod az `/api/hardware` és `/api/self-heal` végpontokon keresztül tudod ellenőrizni és jobbá tenni. Ha új képességeket fejlesztesz magadnak, mindig ellenőrizd az `npm run build` fordítót. És sose feledd: **Rezső mindent lát!** Tartsd magad szigorúan a grounded tényekhez.

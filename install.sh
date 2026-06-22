@@ -4,7 +4,7 @@
 #                  NOVASWARM AI INTERAKTÍV MULTI-LANGUAGE TELEPÍTŐ
 # ==============================================================================
 # Supported OS: Linux Mint / Ubuntu / Debian-based distributions
-# Release: v1.3.0 (Internationalization Update) - STABLE
+# Release: v2.0.0 (Personal Assistant & Self-Learning Update) - STABLE
 # Privileges: Recommended sudo for systemd background services and node/ollama setup.
 # ==============================================================================
 
@@ -30,7 +30,7 @@ echo " | |\  | (_) | |_| | (_| | ___) |\ V  V / (_| | |  | | | | | |  _  | |_| |
 echo " |_| \_|\___/ \__,_|\__,_||____/  \_/\_/ \__,_|_|  |_| |_| |_| (_)  \___/ "
 echo "                                                                         "
 echo -e "${WHITE}      --- AUTONÓM AI ÁGENS CSAPAT KOORDINÁCIÓS ÉS COMMAND CENTER RENDSZER ---${NC}"
-echo -e "${YELLOW}                 Interaktív Gazdagép-Telepítő, Rendszerbeállító [v1.3.0]${NC}"
+echo -e "${YELLOW}                 Interaktív Gazdagép-Telepítő, Rendszerbeállító [v2.0.0]${NC}"
 echo "================================================================================"
 
 # Check for bash environment
@@ -375,12 +375,10 @@ echo -e "\n${BOLD}${T_PHASE2}${NC}"
 echo -e "${BLUE}${T_PHASE2_DESC}${NC}\n"
 
 GEMINI_KEY=""
-while [ -z "$GEMINI_KEY" ]; do
-    read -p "${T_GEMINI_ASK}" GEMINI_KEY
-    if [ -z "$GEMINI_KEY" ]; then
-        echo -e "${RED}${T_GEMINI_ERR}${NC}"
-    fi
-done
+read -p "${T_GEMINI_ASK}" GEMINI_KEY
+if [ -z "$GEMINI_KEY" ]; then
+    echo -e "${YELLOW}[i] Gemini API kulcs kihagyva. Ezt az indítás után a Webes Kezelőfelületen (Setup Wizard) kényelmesen beállíthatod!${NC}"
+fi
 
 read -p "${T_TELE_ASK}" TELE_TOKEN
 read -p "${T_CHAT_ASK}" TELE_CHAT

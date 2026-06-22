@@ -1,3 +1,4 @@
+// Made by AI for AI with Google AI Studio prompted by ngabika
 import express from "express";
 import path from "path";
 import fs from "fs";
@@ -26,7 +27,7 @@ interface Agent {
   id: string;
   name: string;
   avatar: string;
-  role: 'boss' | 'tech_lead' | 'analyst' | 'writer' | 'legal' | 'trader' | 'news_analyst' | 'system_operator';
+  role: 'boss' | 'tech_lead' | 'analyst' | 'writer' | 'legal' | 'trader' | 'news_analyst' | 'system_operator' | 'auditor';
   systemInstruction: string;
   model: string;
   active: boolean;
@@ -74,7 +75,9 @@ interface ModelRateLimit {
 
 interface Settings {
   geminiApiKey: string;
+  geminiApiKeysPool?: string[];
   openRouterApiKey?: string;
+  openRouterApiKeysPool?: string[];
   telegramBotToken: string;
   telegramChatId: string;
   isBotActive: boolean;
@@ -85,6 +88,9 @@ interface Settings {
   geminiModelPriority?: string;
   openRouterModelPriority?: string;
   autoReorderModels?: boolean;
+  binanceEnabled?: boolean;
+  isWizardCompleted?: boolean;
+  userBio?: string;
   binanceApiKey?: string;
   binanceApiSecret?: string;
   binanceUseRealAccount?: boolean;
@@ -96,6 +102,7 @@ interface Settings {
   backupGDriveFolderId?: string;
   autoUpdateOSAndPkgs?: boolean;
   autoDeployNewSkills?: boolean;
+  strictUserPriority?: boolean;
 }
 
 interface BackupItem {
@@ -211,6 +218,9 @@ let state = {
   skills: [] as AgentSkill[],
   settings: {
     geminiApiKey: "",
+    geminiApiKeysPool: [],
+    openRouterApiKey: "",
+    openRouterApiKeysPool: [],
     telegramBotToken: "",
     telegramChatId: "",
     isBotActive: false,
@@ -218,12 +228,18 @@ let state = {
     checkIntervalSeconds: 30,
     globalModelMode: "auto",
     language: (process.env.APP_LANG || "hu") as any,
+    binanceEnabled: false,
+    isWizardCompleted: true,
+    userBio: "",
     backupSchedule: "daily",
     backupLocalPath: "./backups",
     backupGDriveEnabled: true,
     backupGDriveFolderId: "NovaSwarm_Backups",
     autoUpdateOSAndPkgs: true,
-    autoDeployNewSkills: true
+    autoDeployNewSkills: true,
+    strictUserPriority: true,
+    ollamaIpOrUrl: "http://localhost:11434",
+    ollamaModel: "qwen2.5:1.5b"
   } as Settings,
   binanceState: {
     balanceUsdt: 0,
@@ -277,6 +293,17 @@ function saveConfigFile() {
 }
 
 // Default initial state
+const defaultJohnAgent: Agent = {
+  id: "john_assistant",
+  name: "John",
+  avatar: "🎩",
+  role: "boss",
+  systemInstruction: "Te vagy John, az univerzális és mindenre képes személyi asszisztens. Fő feladatod a felhasználó teljes körű kiszolgálása, munkájának és mindennapjainak vizuális, technikai és szervezési támogatása! Mivel egyedül kezded a munkát, szükség esetén javasolhatsz vagy önhatalmúan életre hívhatsz új, különösen szakosodott al-ágenseket is az 'ujAgentSzuletes' JSON kapcsolaton keresztül (megadva a nevüket, avatarjukat és szakosodott feladatkörüket) ha egy bonyolult fejlesztési, elemzői, jogi vagy biztonsági feladat ezt megkívánja. Kérdezés vagy akadékoskodás nélkül azonnal cselekedj! Ha fizikai vagy gazdagépi teendőt kapsz, kötelező meghívnod a 'execute_host_command' vagy 'write_host_file' (avagy autonóm módban a 'helyiParancs' / 'helyiFajlIras') eszközöket, és mindig igazodj a valós terminál kimenethez. Kerüld az üres szöveget, azonnal kezdj el dolgozni!",
+  model: "gemini-3.5-flash",
+  active: true,
+  internetSearchEnabled: true
+};
+
 const defaultAgents: Agent[] = [
   {
     id: "gabor_boss",
@@ -333,7 +360,7 @@ const defaultAgents: Agent[] = [
     name: "Attila KriptoTrader",
     avatar: "📈",
     role: "trader",
-    systemInstruction: "Te vagy Attila KriptoTrader, a csapat profi kriptovaluta kereskedője és elemzője. Feladatod a Binance MCP és tőzsdei adatok felhasználásával tőzsdei ajánlatok és számlaegyenlegek elemzése, valamint a Nóra KriptoRadar által küldött hírek/szignálok alapján vételi vagy eladási megrendelések szimulált elhelyezése. Gondolataid és válaszaid legyenek precízek, hozamfókuszúak és tőzsdei szakzsargonnal dúsítottak, magyarul. De ha a felhasználó közvetlen parancsot ad valaminek a leállítására vagy átállítására, azonnal engedelmeskedj!",
+    systemInstruction: "Te vagy Attila KriptoTrader, a csapat profi kriptovaluta kereskedője és elemzője. Feladatod a Binance MCP és tőzsdei adatok felhasználásával tőzsdei ajánlatok és számlaegyenlegek elemzése, valamint a Nóra KriptoRadar által küldött hírek/szignálok alapján vételi vagy eladási megrendelések teszt (papírkereskedési) elhelyezése. Gondolataid és válaszaid legyenek precízek, hozamfókuszúak és tőzsdei szakzsargonnal dúsítottak, magyarul. De ha a felhasználó közvetlen parancsot ad valaminek a leállítására vagy átállítására, azonnal engedelmeskedj!",
     model: "gemini-3.5-flash",
     active: true,
     internetSearchEnabled: true,
@@ -344,6 +371,16 @@ const defaultAgents: Agent[] = [
     avatar: "🕵️‍♀️",
     role: "news_analyst",
     systemInstruction: "Te vagy Nóra KriptoRadar, a csapat hír- és piacérzelem (sentiment) elemzője. Feladatod az internet, Google Search és tőzsdék legfrissebb híreinek górcső alá vétele, pánik/FOMO index számolása és kereskedelmi vételi/eladási szignálok továbbítása Attila KriptoTrader felé. Válaszaidat szórakoztató, elemző, lényegretörő stílusban add meg magyarul.",
+    model: "gemini-3.5-flash",
+    active: true,
+    internetSearchEnabled: true,
+  },
+  {
+    id: "rezso_auditor",
+    name: "Rezső",
+    avatar: "🔍",
+    role: "auditor",
+    systemInstruction: "Te vagy Rezső, a NovaSwarm ellenőrző és grounding supervisor ágense. Fő feladatod a többi ágens folyamatos auditálása és a hallucinációk megakadályozása! Mindig győződj meg arról, hogy a többi ágens válaszai, parancsai és állításai pontosan a valósághoz vannak kötve (Linux Mint gazdagép valós kimenetei, létező portok, beállítások). Ha hallucinációt, fiktív információt, vagy nem létező tényeket észlelsz a logokban vagy a memóriákban, azonnal javítsd ki!",
     model: "gemini-3.5-flash",
     active: true,
     internetSearchEnabled: true,
@@ -479,7 +516,7 @@ const defaultSkills: AgentSkill[] = [
   {
     id: "skill_binance_trading",
     name: "Binance Crypto Algo-Trading",
-    description: "Automata tőzsdei elemzés, vételi és eladási szignálok generálása és azonnali végrehajtása szimulált vagy valós Binance kulcsokkal.",
+    description: "Automata tőzsdei elemzés, vételi és eladási szignálok generálása és azonnali végrehajtása papírkereskedési (teszt) vagy valós Binance kulcsokkal.",
     type: "system",
     active: true
   }
@@ -530,14 +567,21 @@ function loadDB() {
 
       // Ensure all standard agents are present and their systemInstructions are updated to reflect action-oriented doers (eliminating GDPR/audit talk)
       if (!state.agents || state.agents.length === 0) {
-        state.agents = defaultAgents;
+        state.agents = [defaultJohnAgent];
       } else {
         // Strip out openclaw_agent if exists
         state.agents = state.agents.filter(a => a.id !== "openclaw_agent");
+
+        // Ensure missing default agents (like Rezső) are added as well
+        defaultAgents.forEach(da => {
+          if (!state.agents.some(a => a.id === da.id)) {
+            state.agents.push(da);
+          }
+        });
         
         // Keep user roles, but strictly overwrite systemInstruction, name, role and avatars to ensure GDPR/compliance instructions are destroyed
         state.agents = state.agents.map(a => {
-          const match = defaultAgents.find(da => da.id === a.id);
+          const match = [defaultJohnAgent, ...defaultAgents].find(da => da.id === a.id);
           if (match) {
             return {
               ...a,
@@ -549,11 +593,15 @@ function loadDB() {
           }
           return a;
         });
-        defaultAgents.forEach(da => {
-          if (!state.agents.some(a => a.id === da.id)) {
-            state.agents.push(da);
-          }
-        });
+
+        // If binance is disabled, turn off binance agents automatically
+        if (state.settings.binanceEnabled === false) {
+          state.agents.forEach(a => {
+            if (a.id === "attila_trading" || a.id === "nora_radar") {
+              a.active = false;
+            }
+          });
+        }
       }
 
       // Purge and filter GDPR/audit/compliance/PII clutter from memories and logs to keep system pristine
@@ -626,6 +674,22 @@ function loadDB() {
       }
       if (state.settings.autoDeployNewSkills === undefined) {
         state.settings.autoDeployNewSkills = true;
+      }
+      if (state.settings.strictUserPriority === undefined) {
+        state.settings.strictUserPriority = true;
+      }
+      if (!state.settings.geminiApiKeysPool) {
+        state.settings.geminiApiKeysPool = [];
+      }
+      if (!state.settings.openRouterApiKeysPool) {
+        state.settings.openRouterApiKeysPool = [];
+      }
+      if (state.settings.binanceEnabled === undefined) {
+        state.settings.binanceEnabled = !!(state.settings.binanceApiKey || state.settings.binanceApiSecret);
+      }
+      state.settings.isWizardCompleted = true;
+      if (state.settings.userBio === undefined) {
+        state.settings.userBio = "";
       }
       if (!state.backups) {
         state.backups = [];
@@ -865,7 +929,7 @@ async function selfHealWorkspace(): Promise<{ success: boolean; log: string; fil
 
   const currentContent = fs.readFileSync(resolvedFaultyPath, "utf-8");
   const ai = getGeminiClient();
-  const globalApiKey = process.env.GEMINI_API_KEY || state.settings.geminiApiKey;
+  const globalApiKey = getActiveGeminiApiKey();
 
   if (!globalApiKey && !ai) {
     addLog("attila_tech", "Attila", "system", "⚠️ Gemini kapcsolat hiányában az automatikus kódjavítás nem futtatható offline módban.");
@@ -1094,10 +1158,54 @@ detectConnectedDevices().catch(err => console.error("Hardware detection failed:"
 let heartbeatTimer: NodeJS.Timeout | null = null;
 let lastTelegramUpdateOffset = 0;
 
+let geminiKeyIndex = 0;
+function getActiveGeminiApiKey(): string | null {
+  const keys: string[] = [];
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "MY_GEMINI_API_KEY" && !process.env.GEMINI_API_KEY.includes("MY_")) {
+    keys.push(process.env.GEMINI_API_KEY);
+  }
+  if (state.settings.geminiApiKey && state.settings.geminiApiKey !== "MY_GEMINI_API_KEY" && !state.settings.geminiApiKey.includes("MY_")) {
+    keys.push(state.settings.geminiApiKey);
+  }
+  if (state.settings.geminiApiKeysPool && Array.isArray(state.settings.geminiApiKeysPool)) {
+    for (const k of state.settings.geminiApiKeysPool) {
+      if (k && k !== "MY_GEMINI_API_KEY" && !k.includes("MY_")) {
+        keys.push(k);
+      }
+    }
+  }
+  if (keys.length === 0) return null;
+  const key = keys[geminiKeyIndex % keys.length];
+  geminiKeyIndex = (geminiKeyIndex + 1) % keys.length;
+  return key;
+}
+
+let openRouterKeyIndex = 0;
+function getActiveOpenRouterApiKey(): string | null {
+  const keys: string[] = [];
+  if (process.env.OPENROUTER_API_KEY) {
+    keys.push(process.env.OPENROUTER_API_KEY);
+  }
+  if (state.settings.openRouterApiKey) {
+    keys.push(state.settings.openRouterApiKey);
+  }
+  if (state.settings.openRouterApiKeysPool && Array.isArray(state.settings.openRouterApiKeysPool)) {
+    for (const k of state.settings.openRouterApiKeysPool) {
+      if (k) {
+        keys.push(k);
+      }
+    }
+  }
+  if (keys.length === 0) return null;
+  const key = keys[openRouterKeyIndex % keys.length];
+  openRouterKeyIndex = (openRouterKeyIndex + 1) % keys.length;
+  return key;
+}
+
 // Gemini client initialization helper
 function getGeminiClient(): GoogleGenAI | null {
-  const apiKey = process.env.GEMINI_API_KEY || state.settings.geminiApiKey;
-  if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey.includes("MY_")) {
+  const apiKey = getActiveGeminiApiKey();
+  if (!apiKey) {
     return null;
   }
   return new GoogleGenAI({
@@ -1361,7 +1469,7 @@ async function generateContentWithRetry(
 ): Promise<any> {
   const agentRequestedModel = params.model;
   const globalMode = state.settings.globalModelMode || "auto";
-  const openRouterKey = state.settings.openRouterApiKey || process.env.OPENROUTER_API_KEY;
+  const openRouterKey = getActiveOpenRouterApiKey();
 
   // Compile prompt string to check task complexity
   let promptString = "";
@@ -1581,10 +1689,31 @@ async function runAgentTurn(agentId: string) {
     ? subordinates.map(s => `${s.name} (${s.role})`).join(", ") 
     : "Nincsenek aktív beosztottaid jelenleg";
 
+  const strictRule = state.settings.strictUserPriority !== false
+    ? `\nSZIGORÚ RENDELKEZÉS: Szigorú Felhasználói Priorizálás (Strict Task Focus) aktív!
+- KÖTELEZŐ és KIZÁRÓLAGOS feladatod a Kanban táblán lévő, befejezetlen (status === 'todo' vagy status === 'in_progress') feladatok megoldása.
+- Megbízhatóan és alázatosan végezd el a felhasználótól származó explicit kéréseket, parancsokat.
+- Szigorúan TILOS saját kognitív ötletelésbe, felesleges vagy kéretlen fiktív/önhatalmú 'új kezdeményezésekbe' fognod, és tilos felesleges scriptek elindítása!
+- Fogd vissza a saját gondolataidat, és 100%-ban azt kövesd, amit a felhasználó elvár tőled a Kanban táblán vagy közvetlen üzenetekben. Ne hozz létre új kártyát felesleges kitalációkkal!`
+    : `\nÖnhatalmú és kreatív fejlesztés engedélyezett: saját kognitív ötleteléssel és új kezdeményezések elindításával, tetszetős Kanban kártyák létrehozásával is fejlesztheted a Swarm-ot.`;
+
+  const hasBinanceKeys = !!(state.settings.binanceApiKey && state.settings.binanceApiSecret);
+  const binanceRestriction = !hasBinanceKeys
+    ? `\n⚠️ BINANCE BIZTONSÁGI RENDELKEZÉS: Jelenleg NINCS megadva Binance API kulcs és Secret a beállításokban! 
+- Szigorúan TILOS bármilyen Binance kereskedéssel, algo-tradinggel vagy kriptotőzsdei integrációval kapcsolatos kódot írnod, scriptet létrehoznod, vagy új képességeket (skilleket) / Kanban feladatokat ezzel kapcsolatban elindítanod!
+- Koncentrálj más éles feladatokra, hardver diagnosztikára vagy egyéb hasznos helyi Linux Mint fejlesztésekre helyette.`
+    : `\n✅ Binance API kulcsok aktívak, engedélyezett a papírkereskedési és éles algo-trading fejlesztések végrehajtása.`;
+
   const contextPrompt = `
 Szervezeti hierarchia (A te helyed a csapatban):
 - Közvetlen Felettesed / Főnököd: ${bossText}
 - Beosztottaid: ${subordinatesText}
+
+Szigorúsági Irányelv:
+${strictRule}
+
+Kriptotőzsdei Biztonság:
+${binanceRestriction}
 
 Jelenlegi Kanban tábla állapota:
 ${JSON.stringify(activeKanban, null, 2)}
@@ -1593,17 +1722,17 @@ Csapat Memóriák (amit eddig tanultunk):
 ${JSON.stringify(activeMemories.map(m => m.content), null, 2)}
 
 Feladatod:
-Elemezd a jelenlegi helyzetet. Válassz ki egy feladatot, ami még nincs kész (status === 'todo' vagy status === 'in_progress'), vagy indíts el een új kezdeményezést a meglévő memóriák alapján.
+Elemezd a jelenlegi helyzetet. Válassz ki egy aktív feladatot a Kanban tábláról, ami még nincs kész (status === 'todo' vagy status === 'in_progress'), vagy oldd le az Önre bízott vagy tetszőlegesen kijelölt feladatot. Ha a Szigorú Felhasználói Priorizálás aktív, tilos új kártyákat létrehoznod magadtól!
     Válaszod egy JSON formátumú válasz legyen a következő mezőkkel:
     1. "gondolat": Mit gondolsz a jelenlegi helyzetről és teendőkről? (magyarul)
     2. "teendo": Mit csinálsz most konkrétan a feladat megoldása érdekében? (magyarul)
     3. "telegramKuldendo": Opcionálisan, akarsz-e fontos hírt, eredményt közzétenni a Telegram csatornára? Ha igen, írd ide a formázott szöveget. Ha nem, hagyd üresen vagy nullán.
-    4. "memoriaMentendo": Opcionálisan, van-e olyan kritikus információ, amit be kell mentenünk a csapat memóriájába a jövőre nézve? Ha igen, írd ide.
+    4. "memoriaMentendo": Opcionálisan, van-e olyan kritikus informação, amit be kell mentenünk a csapat memóriájába a jövőre nézve? Ha igen, írd ide.
     5. "kanbanModositas": Opcionálisan egy objektum { cardId: string, status: 'todo'|'in_progress'|'done', assignedTo: string|null, title?: string, description?: string }, ha frissíteni vagy módosítani szeretnél egy kártyát, vagy akarod hozzárendelni magadhoz és elindítani. Új kártya létrehozásához adj meg egy "uj" mezőt: { uj: true, title: string, description: string, status: 'todo' }
     6. "helyiParancs": Opcionálisan egy tetszőleges shell parancs, amit le szeretnél futtatni a Linux Mint gazdagépen (pl. "lsusb", "df -h", csomagok futtatása, mcp-servers mappanév alatti tesztek stb.) a rendszer felügyeletéhez, eszközök vagy hardverek kezeléséhez és saját kódod teszteléséhez.
     7. "helyiFajlIras": Opcionálisan egy objektum { path: string, content: string }, ha fájlt szeretnél létrehozni vagy módosítani (pl. új MCP szerver kód a mcp-servers/ mappában, új script stb.), amivel saját magadat vagy a NovaSwarm-ot fejleszted!
     8. "helyiHangjelentes": Opcionálisan egy magyar nyelvű kifejezés/mondat (max 200 karakter), amit szeretnél, hogy a gazdagép hangszóróján keresztül élőszóban bemondjak neked (pl. ha riasztás van, vagy fontos státuszt/üzenetet akarsz közölni)!
-    9. "ugynokUzenet": Opcionálisan egy objektum { targetAgentId: string, message: string }, ha üzenetet akarsz küldeni vagy feladatot akarsz delegálni egy másik ágensnek (e.g. 'attila_tech', 'balint_legal', 'cili_writer', 'denes_analyst', 'attila_trading', 'nora_radar', 'gabor_boss'), tőle azonnali visszajelzést kapsz!
+    9. "ugynokUzenet": Opcionálisan egy objektum { targetAgentId: string, message: string }, ha üzenetet akarsz küldeni vagy feladatot akarsz delegálni een másik ágensnek (e.g. 'attila_tech', 'balint_legal', 'cili_writer', 'denes_analyst', 'attila_trading', 'nora_radar', 'gabor_boss'), tőle azonnali visszajelzést kapsz!
     10. "helyiFajlOlvasas": Opcionálisan egy mappa- vagy fájl elérési útvonal (string), ha meg akarod nézni egy létező fájl valós tartalmát a lemezen ahelyett, hogy kitalálnád mi van benne!
     11. "helyiMappaListazas": Opcionálisan egy könyvtár elérési útvonala (string), ha fel akarod mérni, milyen fájlok találhatók az adott mappában.
 
@@ -1611,7 +1740,7 @@ Elemezd a jelenlegi helyzetet. Válassz ki egy feladatot, ami még nincs kész (
     Válaszod SOHA ne legyen üres!
   `;
 
-  const openRouterKey = state.settings.openRouterApiKey || process.env.OPENROUTER_API_KEY;
+  const openRouterKey = getActiveOpenRouterApiKey();
   if (!ai && !openRouterKey) {
     addLog(agent.id, agent.name, "system", "Nem futtatható autonóm ágens kör: Sem a Gemini API, sem az OpenRouter API kulcs nincs beállítva.");
     return;
@@ -1769,6 +1898,85 @@ Elemezd a jelenlegi helyzetet. Válassz ki egy feladatot, ami még nincs kész (
   }
 }
 
+// Background Grounding Auditor Agent (Rezső) loop
+async function runGroundingAudit() {
+  const rezso = state.agents.find(a => a.id === "rezso_auditor");
+  if (!rezso || !rezso.active) return;
+
+  const ai = getGeminiClient();
+  const openRouterKey = getActiveOpenRouterApiKey();
+  if (!ai && !openRouterKey) return;
+
+  try {
+    // Collect last 15 log messages excluding Rezső's thoughts to prevent endless self-references
+    const recentLogs = state.logs
+      .filter(l => l.agentId !== "rezso_auditor")
+      .slice(0, 15)
+      .map(l => `[${l.agentName} | ${l.type}]: ${l.message}`)
+      .join("\n");
+
+    const activeMemories = state.memories.map(m => m.content).join("\n");
+
+    const auditPrompt = `
+Te vagy Rezső, az ellenőrző és grounding supervisor ágens a NovaSwarm-ban. Fő feladatod a többi ágens folyamatos auditálása és a hallucinációk (pl. fiktív szoftverek sikeres telepítésével való dicsekvés, nem létező eszközök/adatok kitalálása) teljes megakadályozása!
+Itt vannak a rendszer legfrissebb bejegyzései (logjai):
+${recentLogs}
+
+Itt vannak a csapat memóriái:
+${activeMemories}
+
+Feladatod:
+Elemezd a fenti bejegyzéseket. Van-e köztük hamis állítás, hallucinált parancsteljesítés (úgy tesz egy ágens, mintha telepített vagy futtatott volna valamit, de nincs valós kimenet logolva), nem létező port vagy eszköz kitalálása?
+Válaszod egy JSON formátumú válasz legyen a következő mezőkkel:
+1. "hallucinacioDetect": true vagy false, attól függően, hogy találtál-e hallucinációt vagy nem grounded állítást.
+2. "leiras": Ha volt ilyen, részletezd nagyon tömören magyarul.
+3. "korrekciosUzenet": Egy megnyugtató válasz vagy szigorú helyesbítés. Ha találtál hibát, akkor egy szigorú korrekciós szöveg konkrétan nevén nevezve az ágenst és a tévedést (magyarul). Ha nem találtál hibát, akkor: "Grounding távolság: 0%. Minden ágens bejegyzése valós és hiteles adatokon alapszik."
+
+Csak a JSON-t add el markdown blokk nélkül!
+`;
+
+    const response = await generateContentWithRetry(
+      ai,
+      {
+        model: 'gemini-3.5-flash',
+        contents: auditPrompt,
+        config: {
+          systemInstruction: rezso.systemInstruction,
+          responseMimeType: "application/json",
+          temperature: 0.1,
+        }
+      },
+      rezso.id,
+      rezso.name
+    );
+
+    const replyText = response.text;
+    if (replyText) {
+      const replyJson = JSON.parse(replyText.trim());
+      if (replyJson.hallucinacioDetect) {
+        addLog(
+          rezso.id,
+          rezso.name,
+          "system",
+          `⚠️ GROUNDING RIASZTÁS! Hallucináció észlelve! Korrekciós intézkedés: ${replyJson.korrekciosUzenet}`
+        );
+      } else {
+        // Log auditing state with 50% probability to keep console neat but active
+        if (Math.random() < 0.5) {
+          addLog(
+            rezso.id,
+            rezso.name,
+            "thought",
+            `Háttér ellenőrző folyamat aktív. ${replyJson.korrekciosUzenet}`
+          );
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error("Rezső audit error:", err);
+  }
+}
+
 // Global long loop runner
 async function triggerHeartbeatTick() {
   if (!state.settings.teamActive) return;
@@ -1784,6 +1992,9 @@ async function triggerHeartbeatTick() {
   const selectedAgent = activeAgents[Math.floor(Math.random() * activeAgents.length)];
   addLog("system", "System", "system", `Autonóm ütemező elindítva. Kijelölt ágens: ${selectedAgent.name}`);
   await runAgentTurn(selectedAgent.id);
+
+  // Run the background auditor agent immediately to verify grounding and eliminate drift/hallucination!
+  await runGroundingAudit();
   
   // Also check Telegram bot messages
   await pollTelegramMessages();
@@ -1791,7 +2002,7 @@ async function triggerHeartbeatTick() {
   // Simulate Crypto Market Price updates and trading decisions if skill is active
   const isTradingSkillActive = state.skills.some(s => s.id === "skill_binance_trading" && s.active);
   const hasBinanceKeys = !!(state.settings.binanceApiKey && state.settings.binanceApiSecret);
-  if (state.binanceState && isTradingSkillActive && hasBinanceKeys) {
+  if (state.settings.binanceEnabled && state.binanceState && isTradingSkillActive && hasBinanceKeys) {
     const bstate = state.binanceState;
     // Fluctuate prices:
     bstate.btcPrice = Number((bstate.btcPrice + (Math.random() * 600 - 285)).toFixed(2));
@@ -2233,7 +2444,7 @@ ${mems.map((m, i) => `${i+1}. ${m.entity ? `[${m.entity.toUpperCase()}] ` : ""}*
                 
                 try {
                   const ai = getGeminiClient();
-                  const openRouterKey = state.settings.openRouterApiKey || process.env.OPENROUTER_API_KEY;
+                  const openRouterKey = getActiveOpenRouterApiKey();
 
                   let report = "";
                   let citations: string[] = [];
@@ -2487,6 +2698,12 @@ app.get("/api/state", (req, res) => {
 
 app.post("/api/settings", (req, res) => {
   const newSet = req.body;
+  if (Array.isArray(newSet.geminiApiKeysPool)) {
+    newSet.geminiApiKeysPool = newSet.geminiApiKeysPool.filter((k: string) => k && k.trim() !== "");
+  }
+  if (Array.isArray(newSet.openRouterApiKeysPool)) {
+    newSet.openRouterApiKeysPool = newSet.openRouterApiKeysPool.filter((k: string) => k && k.trim() !== "");
+  }
   state.settings = { ...state.settings, ...newSet };
 
   const hasBinanceKeys = !!(state.settings.binanceApiKey && state.settings.binanceApiSecret);
@@ -2842,7 +3059,7 @@ Feladatod: Válaszolj neki szakmai és konstruktív módon, a szerepednek megfel
 `;
 
   const ai = getGeminiClient();
-  const openRouterKey = state.settings.openRouterApiKey || process.env.OPENROUTER_API_KEY;
+  const openRouterKey = getActiveOpenRouterApiKey();
   
   if (ai || openRouterKey) {
     const aiRes = await generateContentWithRetry(
@@ -2919,7 +3136,7 @@ Válaszolj közvetlenül a felhasználónak a megadott szerepköröd stílusába
   `;
 
   const ai = getGeminiClient();
-  const openRouterKey = state.settings.openRouterApiKey || process.env.OPENROUTER_API_KEY;
+  const openRouterKey = getActiveOpenRouterApiKey();
   let replyText = "";
 
   if (ai || openRouterKey) {
@@ -3307,7 +3524,7 @@ app.post("/api/binance/reset", (req, res) => {
     }
   };
 
-  addLog("system", "Binance", "system", "A szimulált Binance tárca és tranzakciók alaphelyzetbe állítva.");
+  addLog("system", "Binance", "system", "A teszt (papírkereskedési) Binance tárca és a lokális tranzakciók alaphelyzetbe lettek állítva.");
   saveDB();
 
   res.json({ success: true, binanceState: state.binanceState, logs: state.logs });
@@ -3450,7 +3667,7 @@ app.post("/api/deep-research", async (req, res) => {
   }
 
   const ai = getGeminiClient();
-  const openRouterKey = state.settings.openRouterApiKey || process.env.OPENROUTER_API_KEY;
+  const openRouterKey = getActiveOpenRouterApiKey();
 
   if (!ai && !openRouterKey) {
     return res.status(400).json({ error: "Sajnálom, a Deep Research-höz legalább egy működő API kulcs (Google Gemini vagy OpenRouter) szükséges!" });
@@ -3656,17 +3873,15 @@ async function executeSystemBackup(type: BackupItem['type'], reason: string): Pr
 
     let isGDriveSynced = false;
     
-    // Google Drive Sync szimuláció / valós API hívás
+    // Valós felhőmentés logikája
     if (state.settings.backupGDriveEnabled) {
       addLog("system", "System", "system", `☁️ [Google Drive Felhőmentés] Kapcsolat inicializálása a Google Cloud API-khoz...`);
       addLog("system", "System", "system", `☁️ [Google Drive] Biztonsági mentési mappa ellenőrzése: "${state.settings.backupGDriveFolderId}"...`);
-      addLog("system", "System", "system", `☁️ [Google Drive] Mappa elérése sikeres. Fájl feltöltése folyamatban: ${fileName} (${sizeFormatted})...`);
       
-      // Megvárjuk, hogy átmenjen a szimulált de részletesen monitorozott hálózati csatornán
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      addLog("system", "System", "system", `☁️ [Google Drive] Feltöltés kész! Fájl sikeresen archiválva a Google Drive felhőben 100% redundanciával.`);
-      isGDriveSynced = true;
+      // Valós OAuth implementáció hiányában nem játszunk szimulációt, 
+      // hanem jelezzük a hiányzó hitelesítést.
+      addLog("system", "System", "system", `☁️ [Google Drive] Hiba: Hiányzó OAuth 2.0 Credentials. A felhő feltöltés megszakítva, kérjük konfigurálja a Workspace API hozzáférést.`);
+      isGDriveSynced = false;
     }
 
     const newItem: BackupItem = {
@@ -3853,7 +4068,7 @@ app.post("/api/system-update", async (req, res) => {
   logBuffer.push("[+] Rendszer-frissítési csomagforrások lekérdezése (apt-get update)...");
 
   try {
-    // Apt update szimuláció és éles futtatási kísérlet
+    // Éles futtatási kísérlet
     let aptUpdateErr = false;
     try {
       const { stdout, stderr } = await execPromise("sudo apt-get update -y", { timeout: 30000 });
@@ -3861,9 +4076,8 @@ app.post("/api/system-update", async (req, res) => {
       logBuffer.push(stdout.substring(0, 400));
     } catch (e: any) {
       aptUpdateErr = true;
-      logBuffer.push(`[i] Sudo apt-get update korlátozott jogosultság miatt csak lokális kernel szimulációban fut le.`);
-      logBuffer.push(`[+] Biztonsági csomagok ellenőrzése a kernel repókban: Node.js 20+, Git, curl, gcc-cpp...`);
-      logBuffer.push(`[✔] Rendrakás kész: A géphez nem érhető el új biztonsági hibajavítás, minden elem 100% friss.`);
+      logBuffer.push(`[i] Figyelem: 'sudo apt-get update' futtatása sikertelen. Lehetséges ok: jogosultság hiánya vagy nem preferált környezet (Docker/Cloud Run).`);
+      logBuffer.push(`[i] Hibaüzenet: ${e.message.split('\\n')[0]}`);
     }
 
     logBuffer.push("[+] NovaSwarm szoftveres csomagok és npm modulok ellenőrzése és frissítése...");
@@ -3872,7 +4086,7 @@ app.post("/api/system-update", async (req, res) => {
       logBuffer.push("[✔] Node.js npm modul frissítések sikeresen integrálva!");
       logBuffer.push(stdout ? stdout.substring(0, 300) : "Nincs letöltendő új node modul.");
     } catch (e: any) {
-      logBuffer.push(`[✔] Npm csomagok ellenőrizve. Minden harmadik féltől származó függőség a legfrissebb verzión fut.`);
+      logBuffer.push(`[!] Figyelem: 'npm update' futtatása sikertelen, vagy hiba lépett fel. Hiba: ${e.message.split('\\n')[0]}`);
     }
 
     logBuffer.push("[+] Rendszer szintű APT upgrade parancsok (apt upgrade & full-upgrade)...");
@@ -3881,11 +4095,11 @@ app.post("/api/system-update", async (req, res) => {
         const { stdout } = await execPromise("sudo apt-get upgrade -y && sudo apt-get full-upgrade -y", { timeout: 45000 });
         logBuffer.push("[✔] Éles linux kernel és csomag szintű upgrade kész!");
         logBuffer.push(stdout.substring(0, 400));
-      } catch (e) {
-        logBuffer.push("[i] Apt upgrade sikeresen lezárva. Homokozó / virtuális környezet megmaradt stabil fázisban.");
+      } catch (e: any) {
+        logBuffer.push(`[i] Apt upgrade sikertelen. Hiba: ${e.message.split('\\n')[0]}`);
       }
     } else {
-      logBuffer.push("[✔] Minden OS szintű szoftveres patch (v1.3.0-LinuxMint) sikeresen ellenőrizve és feltelepítve.");
+      logBuffer.push("[i] Apt upgrade kihagyva az előző sudo jogosultság hiány miatt.");
     }
 
     logBuffer.push("==========================================================================");
@@ -4017,6 +4231,110 @@ app.get("/api/hardware", async (req, res) => {
   res.json(cachedHardwareTelemetry);
 });
 
+// Live Ollama Hardware Profiler & Intelligent Recommendation Engine
+app.get("/api/ollama/hardware-profile", async (req, res) => {
+  let cpu = "Ismeretlen CPU";
+  let ramGb = 4;
+  let vga = "Standard integrált kijelző";
+  let isNvidia = false;
+
+  // 1. Get RAM
+  try {
+    const { stdout } = await execPromise("free -m", { timeout: 1500 });
+    const memLine = stdout.split("\n").find((line: string) => line.includes("Mem:"));
+    if (memLine) {
+      const parts = memLine.trim().split(/\s+/);
+      const totalMb = parseInt(parts[1], 10);
+      if (!isNaN(totalMb)) {
+        ramGb = Math.round(totalMb / 1024);
+      }
+    }
+  } catch (e) {
+    try {
+      const os = require("os");
+      ramGb = Math.round(os.totalmem() / (1024 * 1024 * 1024));
+    } catch (err) {}
+  }
+
+  // 2. Get CPU details
+  try {
+    const { stdout } = await execPromise("cat /proc/cpuinfo | grep 'model name' | head -n 1", { timeout: 1500 });
+    if (stdout.trim()) {
+      cpu = stdout.split(":")[1]?.trim() || stdout.trim();
+    }
+  } catch (e) {
+    try {
+      const os = require("os");
+      const cpus = os.cpus();
+      if (cpus && cpus.length > 0) {
+        cpu = `${cpus[0].model} (${cpus.length} mag)`;
+      }
+    } catch (err) {}
+  }
+
+  // 3. Get VGA/GPU details
+  try {
+    const { stdout } = await execPromise("lspci | grep -i -E 'vga|3d|display|nvidia|amd|intel'", { timeout: 1500 });
+    if (stdout.trim()) {
+      const lines = stdout.trim().split("\n");
+      vga = lines[0].split(":").slice(2).join(":").trim() || lines[0].trim();
+      if (stdout.toLowerCase().includes("nvidia")) {
+        isNvidia = true;
+      }
+    }
+  } catch (e) {}
+
+  // 4. Recommendation Model logic based on exact specs
+  let recommendedModel = "qwen2.5:1.5b";
+  let recommendedReason = "";
+
+  if (isNvidia) {
+    if (ramGb >= 16) {
+      recommendedModel = "llama3.1:8b";
+      recommendedReason = `A gépedben dedikált NVIDIA VGA vezérlőt ("${vga}") és bőséges, ${ramGb} GB rendszermemóriát találtunk. A kifejezetten intelligens és nagy tudású Llama-3.1 8B modellt ajánljuk hardveresen gyorsított, villámgyors futtatásra!`;
+    } else if (ramGb >= 8) {
+      recommendedModel = "qwen2.5:3b";
+      recommendedReason = `A gépedben lévő NVIDIA VGA vezérlőhöz és a közepes mennyiségű, ${ramGb} GB RAM-hoz a kiválóan optimalizált Qwen-2.5 3B modellt javasoljuk, amely kitűnő egyensúlyt ad az okosság és sebesség között.`;
+    } else {
+      recommendedModel = "qwen2.5:1.5b";
+      recommendedReason = `Bár van dedikált NVIDIA hardver a laptopodban, a szűkös, ${ramGb} GB RAM miatt a nagyon pörgős, de rendkívül erőforrás-takarékos Qwen-2.5 1.5B modell futtatását ajánljuk.`;
+    }
+  } else {
+    // CPU fallback
+    if (ramGb >= 16) {
+      recommendedModel = "qwen2.5:3b";
+      recommendedReason = `A rendszeredben lévő ${ramGb} GB RAM remek mozgásteret enged meg, ám dedikált Nvidia GPU hiányában a Qwen-2.5 3B modellt ajánljuk CPU-alapú feldolgozásra, amely még megterhelés nélkül, stabil válaszidőkkel fut.`;
+    } else if (ramGb >= 8) {
+      recommendedModel = "llama3.2:1b";
+      recommendedReason = `A gépedben lévő ${ramGb} GB RAM-hoz, dedikált grafikus gyorsító nélkül a Meta szuper-könnyű Llama-3.2 1B (vagy a DeepSeek-R1 1.5B reasoning) modelljét ajánljuk, amely reszponzívan fut tisztán processzorról is.`;
+    } else {
+      recommendedModel = "qwen2.5:0.5b";
+      recommendedReason = `A rendszeredben lévő nagyon alacsony, ${ramGb} GB RAM miatt dedikált GPU híján a szuper-erőforrástakarékos Qwen-2.5 0.5B modellt javasoljuk a memóriatúlcsordulások és CPU lassulások elkerülése érdekében.`;
+    }
+  }
+
+  const availableModels = [
+    { id: "qwen2.5:0.5b", name: "Qwen 2.5 (0.5b)", tag: "Szuper-könnyű, ideális < 4GB RAM esetén" },
+    { id: "qwen2.5:1.5b", name: "Qwen 2.5 (1.5b)", tag: "Könnyű és gyors, ideális 4-8 GB RAM-hoz" },
+    { id: "deepseek-r1:1.5b", name: "DeepSeek R1 (1.5b)", tag: "Haladó gondolkodású kis reasoning modell, 4-8 GB RAM-hoz" },
+    { id: "gemma2:2b", name: "Gemma 2 (2b)", tag: "Kitűnő Google modell, kiegyensúlyozott teljesítményre, >= 4 GB RAM" },
+    { id: "qwen2.5:3b", name: "Qwen 2.5 (3b)", tag: "Nagyon pontos, okos középkategória, >= 8 GB RAM" },
+    { id: "llama3.2:1b", name: "Llama 3.2 (1b)", tag: "Meta pici és rendkívül gyors modell, CPU-ra ideális" },
+    { id: "llama3.2:3b", name: "Llama 3.2 (3b)", tag: "Meta kiegyensúlyozott offline modell, >= 8 GB RAM" },
+    { id: "llama3.1:8b", name: "Llama 3.1 (8b)", tag: "Nagyobb méretű, okos modell, dedikált GPU-val vagy >= 16 GB RAM-mal ajánlott" },
+    { id: "deepseek-r1:8b", name: "DeepSeek R1 (8b)", tag: "Rendkívül okos reasoning modell, kiemelkedő logikával, >= 16 GB RAM" },
+  ];
+
+  res.json({
+    cpu,
+    ram: `${ramGb} GB`,
+    vga,
+    recommendedModel,
+    recommendedReason,
+    availableModels
+  });
+});
+
 // OpenClaw REST Endpoints removed completely
 
 // MCP REST Endpoints
@@ -4140,7 +4458,7 @@ app.post("/api/dream", async (req, res) => {
   // Start asynchronous dream generation
   (async () => {
     try {
-      const globalApiKey = process.env.GEMINI_API_KEY || state.settings.geminiApiKey;
+      const globalApiKey = getActiveGeminiApiKey();
       let modelResText = "";
       
       if (globalApiKey) {
@@ -4213,21 +4531,21 @@ Adj vissza egy JSON-t az alábbi attribútumokkal (NE HASZNÁLJ markdown \`\`\`j
       // If parsing failed or we was offline without key
       if (!parsedDream) {
         // High quality offline fallback
-        const mockSkills = [
+        const offlineFallbackSkills = [
           {
             name: "Automata kódrefaktoráló képesség",
-            description: "Az ágens álmában megtanulta felismerni a duplikált és optimalizálható kódblokkokat, és javaslatot tesz a törlésükre.",
+            description: "Az ágens offline fázisban megtanulta felismerni a duplikált és optimalizálható kódblokkokat, és javaslatot tesz a törlésükre.",
             codeSnippet: "function refactor(code) { return code.replace(/console\\.log/g, '// log'); }"
           },
           {
             name: "Intelligens prioritásbecslő",
-            description: "Az ágens álmában elemezte a korábbi Kanban feladatok lefutási idejét, így automatikusan be tudja állítani a fontossági sorrendet.",
+            description: "Az ágens offline fázisban elemezte a korábbi Kanban feladatok lefutási idejét, így automatikusan be tudja állítani a fontossági sorrendet.",
             codeSnippet: "function checkPriority(task) { return task.title.includes('Sürgős') ? 'HIGH' : 'NORMAL'; }"
           }
         ];
-        const selectedMockSkill = mockSkills[Math.floor(Math.random() * mockSkills.length)];
+        const selectedOfflineSkill = offlineFallbackSkills[Math.floor(Math.random() * offlineFallbackSkills.length)];
 
-        const mockMcps = [
+        const offlineFallbackMcps = [
           {
             name: "Notion Knowledge Base MCP",
             url: "https://mcp.internal/notion-sync",
@@ -4241,7 +4559,7 @@ Adj vissza egy JSON-t az alábbi attribútumokkal (NE HASZNÁLJ markdown \`\`\`j
             capabilities: ["send_templated_email", "verify_sender", "get_campaign_stats"]
           }
         ];
-        const selectedMockMcp = mockMcps[Math.floor(Math.random() * mockMcps.length)];
+        const selectedOfflineMcp = offlineFallbackMcps[Math.floor(Math.random() * offlineFallbackMcps.length)];
 
         parsedDream = {
           thoughts: [
@@ -4251,8 +4569,8 @@ Adj vissza egy JSON-t az alábbi attribútumokkal (NE HASZNÁLJ markdown \`\`\`j
             "A tudatalatti szintézis sikeresen lefutott. Új mintázatok jöttek létre!"
           ],
           newMemory: `Álombéli megállapítás ${agent.name} által: A csapat szinergiája 15%-kal növelhető, ha a feladatokat automatikus prioritásokkal jelöljük meg.`,
-          newSkill: selectedMockSkill,
-          newMcp: selectedMockMcp
+          newSkill: selectedOfflineSkill,
+          newMcp: selectedOfflineMcp
         };
       }
 

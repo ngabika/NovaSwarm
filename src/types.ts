@@ -1,8 +1,9 @@
+// Made by AI for AI with Google AI Studio prompted by ngabika
 export interface Agent {
   id: string;
   name: string;
   avatar: string;
-  role: 'boss' | 'tech_lead' | 'analyst' | 'writer' | 'legal' | 'trader' | 'news_analyst' | 'system_operator';
+  role: 'boss' | 'tech_lead' | 'analyst' | 'writer' | 'legal' | 'trader' | 'news_analyst' | 'system_operator' | 'auditor';
   systemInstruction: string;
   model: string;
   active: boolean;
@@ -50,7 +51,9 @@ export interface ModelRateLimit {
 
 export interface Settings {
   geminiApiKey: string;
+  geminiApiKeysPool?: string[];
   openRouterApiKey?: string;
+  openRouterApiKeysPool?: string[];
   telegramBotToken: string;
   telegramChatId: string;
   isBotActive: boolean;
@@ -61,6 +64,9 @@ export interface Settings {
   geminiModelPriority?: string; // Comma separated priority string
   openRouterModelPriority?: string; // Comma separated priority string
   autoReorderModels?: boolean; // Weekly auto refresh active mode
+  binanceEnabled?: boolean; // Global toggle to enable/disable Binance trading
+  isWizardCompleted?: boolean; // Flag to indicate if setup wizard is completed
+  userBio?: string; // User's self introduction/bio
   binanceApiKey?: string;
   binanceApiSecret?: string;
   binanceUseRealAccount?: boolean;
@@ -72,6 +78,9 @@ export interface Settings {
   backupGDriveFolderId?: string;
   autoUpdateOSAndPkgs?: boolean;
   autoDeployNewSkills?: boolean;
+  strictUserPriority?: boolean;
+  ollamaIpOrUrl?: string;
+  ollamaModel?: string;
 }
 
 export interface BackupItem {

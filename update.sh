@@ -4,7 +4,7 @@
 #                  NOVASWARM AI AUTOMATA SZOFTVERFRISSÍTŐ (OTA)
 # ==============================================================================
 # Támogatott OS: Helyi Linux Mint / Ubuntu / Debian alapú disztribúciók
-# Kiadás: v1.3.0 STABLE (Magyar verzió)
+# Kiadás: v2.0.0 STABLE (Magyar verzió)
 # Adatvédelem: Nem-roncsoló és megőrző automatikus adatbázis & .env migrációval.
 # ==============================================================================
 
@@ -202,7 +202,7 @@ fi
 echo "================================================================================"
 echo -e "${GREEN}${BOLD}🎉 SORSOLÁSMENTES FRISSÍTÉS ÉS ADATMIGRÁCIÓ SIKERESEN BEFEJEZŐDÖTT!${NC}"
 echo "================================================================================"
-echo -e " 🌐 ${BOLD}Alkalmazás verziója:${NC} ${CYAN}v1.3.0-STABLE${NC}"
+echo -e " 🌐 ${BOLD}Alkalmazás verziója:${NC} ${CYAN}v2.0.0-STABLE${NC}"
 echo -e " 💾 ${BOLD}Tudásbázis integritás:${NC} ${GREEN}Megőrzve és sértetlen!${NC}"
 echo -e " 📢 ${BOLD}Következő lépés:${NC} Nyiss rá a webes felületre, a NovaSwarm zökkenőmentesen fut tovább az új konfigurációval!"
 echo "================================================================================"
