@@ -82,7 +82,7 @@ sudo apt install -y git nodejs npm espeak-ng spd-say
 
 ### 2. Projekt klónozása
 ```bash
-git clone <github-reposztori-url> novaswarm
+git clone https://github.com/ngabika/NovaSwarm/
 cd novaswarm
 npm install
 ```
