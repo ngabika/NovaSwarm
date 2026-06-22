@@ -1,4 +1,4 @@
-# 🤖 NovaSwarm AI - Autonóm Multi-Agent Csapat Kezelő (v2.0.1)
+# 🤖 NovaSwarm AI - Autonóm Multi-Agent Csapat Kezelő (v2.0.3)
 
 <div align="center">
   <img src="./src/assets/images/novaswarm_banner_1782147520316.jpg" alt="NovaSwarm AI Network Architecture Banner" width="100%" max-width="800px" style="border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);" />
@@ -131,6 +131,14 @@ sudo systemctl start novaswarm
 ---
 
 ## 📈 Verziótörténet
+
+* **v2.0.3**
+  * **Intelligens Failover Javítás**: Az API kulcs rotáció és újrapróbálkozás logikájának (Exponential Backoff) javítása. A rendszer most már helyesen léptet a kulcsok között és megbízhatóbban vált a helyi modellekre (Ollama) vagy OpenRouterre, ha egy API kulcs kifogyott vagy Rate Limit-et kap.
+
+* **v2.0.2**
+  * **Kezdeti Setup Wizard**: Telepítés után a weben könnyedén beállítható az első ágens és az API kulcsok.
+  * **OpenClaw struktúrájú álmodozás**: Light, Deep és REM fázisú álmodozás háttér folyamatok bevezetése, amely kiválogatja és konszolidálja a memóriát.
+  * Felhasználói kontextus és bemutatkozás lehetősége a Setup során.
 
 * **v2.0.1**
   * **GitHub OTA Checker & Updater**: Háttérfolyamat vizsgálja a távoli [ngabika/NovaSwarm](https://github.com/ngabika/NovaSwarm) gyűjtemény oldalán / repository-n belüli legújabb commitokat és kiadásokat.

@@ -611,29 +611,20 @@ function loadDB() {
         });
       }
 
-      // Ensure all standard agents are present and their systemInstructions are updated to reflect action-oriented doers (eliminating GDPR/audit talk)
-      if (!state.agents || state.agents.length === 0) {
-        state.agents = [defaultJohnAgent];
+      // Disable auto-injection of missing default agents to keep it clean.
+      if (!state.agents) {
+        state.agents = [];
       } else {
         // Strip out openclaw_agent if exists
         state.agents = state.agents.filter(a => a.id !== "openclaw_agent");
 
-        // Ensure missing default agents (like Rezső) are added as well
-        defaultAgents.forEach(da => {
-          if (!state.agents.some(a => a.id === da.id)) {
-            state.agents.push(da);
-          }
-        });
-        
-        // Keep user roles, but strictly overwrite systemInstruction, name, role and avatars to ensure GDPR/compliance instructions are destroyed
+        // Disable defaultAgents injection
+        // Keep system instructions up to date if they are from default
         state.agents = state.agents.map(a => {
           const match = [defaultJohnAgent, ...defaultAgents].find(da => da.id === a.id);
           if (match) {
             return {
               ...a,
-              name: match.name,
-              avatar: match.avatar,
-              role: match.role,
               systemInstruction: match.systemInstruction
             };
           }
@@ -814,7 +805,7 @@ function loadDB() {
       
       console.log("Database successfully loaded with default MCP/Skills upgrade check.");
     } else {
-      state.agents = defaultAgents;
+      state.agents = [];
       state.kanbanCards = defaultKanban;
       state.memories = defaultMemories;
       state.mcpServers = defaultMcpServers;
@@ -834,7 +825,7 @@ function loadDB() {
     loadConfigFile();
   } catch (err) {
     console.error("Failed to load db, resetting to defaults", err);
-    state.agents = defaultAgents;
+    state.agents = [];
     state.kanbanCards = defaultKanban;
     state.memories = defaultMemories;
     state.mcpServers = defaultMcpServers;
@@ -1603,12 +1594,24 @@ async function generateContentWithRetry(
   let lastError: any = null;
 
   for (const chan of channels) {
-    const maxRetries = (chan.provider === 'ollama') ? 1 : 2;
+    let maxRetries = 2;
+    if (chan.provider === 'ollama') {
+      maxRetries = 1;
+    } else if (chan.provider === 'gemini') {
+      const gKeys = (state.settings.geminiApiKeysPool || []).filter(k => k && !k.includes("MY_")).length + (state.settings.geminiApiKey && !state.settings.geminiApiKey.includes("MY_") ? 1 : 0);
+      maxRetries = Math.max(2, gKeys);
+    } else if (chan.provider === 'openrouter') {
+      const orKeys = (state.settings.openRouterApiKeysPool || []).filter(k => k && k.trim() !== "").length + (state.settings.openRouterApiKey ? 1 : 0);
+      maxRetries = Math.max(2, orKeys);
+    }
     let delay = 1000;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         if (chan.provider === 'gemini') {
+          const currentAi = getGeminiClient();
+          if (!currentAi) throw new Error("Nincs megadva aktív Gemini API kulcs");
+
           // Check local simulated limit guard
           const limitObj = modelLimits.find(l => l.model === chan.model);
           if (limitObj && limitObj.remainingRequests <= 0) {
@@ -1633,7 +1636,7 @@ async function generateContentWithRetry(
             }
           }
 
-          const result = await ai!.models.generateContent(activeParams);
+          const result = await currentAi.models.generateContent(activeParams);
 
           if (limitObj) {
             limitObj.remainingRequests = Math.max(0, limitObj.remainingRequests - 1);
@@ -1648,9 +1651,12 @@ async function generateContentWithRetry(
           return result;
         } else if (chan.provider === 'openrouter') {
           // OpenRouter execution
+          const currentOrKey = getActiveOpenRouterApiKey();
+          if (!currentOrKey) throw new Error("Nincs megadva aktív OpenRouter API kulcs");
+
           const sysInst = params.config?.systemInstruction || "Te egy segítőkész AI asszisztens vagy.";
           const result = await generateOpenRouterContent(
-            openRouterKey!,
+            currentOrKey,
             promptString,
             sysInst,
             chan.model,
@@ -1678,7 +1684,17 @@ async function generateContentWithRetry(
         }
       } catch (err: any) {
         lastError = err;
-        const errMsg = err.message || "";
+        const errMsg = err.message || "Ismeretlen hiba";
+        
+        if (attempt < maxRetries) {
+          const retryMsg = `Hiba a(z) ${chan.provider} csatornán (${chan.model}) [Próbálkozás ${attempt}/${maxRetries}]: ${errMsg.slice(0, 80)}. Újrapróbálkozás...`;
+          console.warn(`${agentName}: ${retryMsg}`);
+          addLog(agentId, agentName, "system", retryMsg);
+          await new Promise(r => setTimeout(r, delay));
+          delay *= 1.5; // exponential backoff
+          continue;
+        }
+
         const fallbackMsg = `Hiba történt a(z) ${chan.provider} csatornán (${chan.model}) (${errMsg.slice(0, 100)}). Átnavigálás a következő alternatívára...`;
         console.warn(`${agentName}: ${fallbackMsg}`);
         addLog(agentId, agentName, "system", fallbackMsg);
@@ -2418,7 +2434,7 @@ Szia ${senderName}! Az alábbi parancsokkal közvetlenül lekérheted a webui in
 *Aktív Ágensek gyűjtője (${activeAgents.length}/${state.agents.length}):*
 ${activeAgents.map(a => `• *${a.name}* (${a.avatar} - ${a.role})`).join("\n")}
 
-📡 *Rendszer verzió:* \`v2.0.1 (Swarm Command & Control Release)\` [ONLINE]`;
+📡 *Rendszer verzió:* \`v2.0.3 (Swarm Command & Control Release)\` [ONLINE]`;
               if (otaUpdateAvailable) {
                 commandReply += `\n\n🔄 *Elérhető frissítés!* \nKüldd a /update parancsot a frissítéshez! (${otaLatestCommitInfo})`;
               }
@@ -2761,6 +2777,38 @@ app.get("/api/state", (req, res) => {
   });
 });
 
+
+app.post("/api/setup", (req, res) => {
+  const { settings, firstAgent } = req.body;
+  if (!settings || !firstAgent) return res.status(400).json({ error: "Missing payload" });
+  
+  // Clear existing agents and set the first one
+  state.agents = [firstAgent];
+  
+  // Apply settings
+  state.settings = {
+    ...state.settings,
+    ...settings,
+    setupCompleted: true
+  };
+  
+  // If user provided a bio, log it in memory immediately
+  if (settings.userBio || settings.userName) {
+    const memoryObj: Memory = {
+      id: `mem_user_intro_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      content: `A felhasználó (Név: ${settings.userName || 'Ismeretlen'}) bemutatkozása és instrukciói: ${settings.userBio || 'Nem adott meg leírást.'}`,
+      agentId: firstAgent.id,
+      agentName: firstAgent.name,
+      importance: 5,
+      type: "user_preference"
+    };
+    state.memories.push(memoryObj);
+  }
+  
+  saveDB();
+  res.json({ success: true, state });
+});
 
 app.post("/api/settings", (req, res) => {
   const newSet = req.body;
@@ -4513,9 +4561,9 @@ app.post("/api/dream", async (req, res) => {
     activeAgentId: agent.id,
     activeAgentName: agent.name,
     thoughts: [
-      "Az ébrenléti állapot megszűnik. A tudatos kontroll átváltozik szubjektív asszociációkká...",
-      "A meglévő memóriák és Kanban feladatok átrendeződnek a neuronhálózatban...",
-      "Mély reflexió és tanulságok keresése folyamatban..."
+      "[LIGHT FÁZIS] Rövid távú állítások és ideiglenes cache vizságlata...",
+      "[DEEP FÁZIS] A fontos tanulságok pontozása és tartós emlékké alakítása...",
+      "[REM FÁZIS] Mintázatok reflexiója és új képességek álmodása..."
     ],
     discoveries: null
   };
@@ -4538,33 +4586,33 @@ app.post("/api/dream", async (req, res) => {
         };
 
         const dreamPrompt = `
-Te egy önálló szoftver fejlesztő ágens vagy álom és meditációs reflexiós fázisban.
+Te egy önálló szoftver fejlesztő ágens vagy álom és meditációs reflexiós fázisban az OpenClaw architektúra modellje alapján.
 Az ügynök neve: ${agent.name}. Funkciója: ${agent.role}. Rendszer leírása: ${agent.systemInstruction}.
 
 Jelenlegi adatbázis összefoglaló a tanácskozáshoz:
 ${JSON.stringify(contextData, null, 2)}
 
-Feladatod: Gondolkodj mélyen a rendszer állapotán ("álmodozz"), és javasolj ÖNÁLLÓAN:
-1. Egy új tanulságot (newMemory) a memóriatárba.
-2. Egy teljesen új ágens képességet (newSkill) amit most sajátítottál el.
-3. Egy új külső csatlakozást (newMcp) amivel bővíthetjük az eszköztárat.
+Feladatod: Gondolkodj mélyen a rendszer állapotán ("álmodozz") a három fázison keresztül:
+1. "Light fázis": Rövid távú állítások kiválogatása a logokból.
+2. "Deep fázis": Pontozd és avasd fel a legjobb megállapítást tartós emlékké (MEMORY.md).
+3. "REM fázis": Mintázatok megfigyelése és új eszközök/képességek kitalálása.
 
 Adj vissza egy JSON-t az alábbi attribútumokkal (NE HASZNÁLJ markdown \`\`\`json blokkot!):
 {
   "thoughts": [
-    "Első elvont gondolat az álom kezdetéről magyarul",
-    "Második gondolat a meglévő információk átrendezéséről magyarul",
-    "Harmadik gondolat a megvilágosodásról és az új felfedezésekről magyarul"
+    "[LIGHT FÁZIS] A rövid távú nyomok és napi emlékek rendezése...",
+    "[DEEP FÁZIS] A felesleg eldobása és a legfontosabb gondolat beemelése tartós memóriába...",
+    "[REM FÁZIS] Mintázatok felismerése a legújabb adatokból..."
   ],
-  "newMemory": "Az új szintetizált megállapításod magyarul",
+  "newMemory": "Az új tartós (Deep) konszolidált memóriád magyarul (Amit be is vezetünk)",
   "newSkill": {
     "name": "Új készség neve magyarul",
-    "description": "Hogyan segíti ezt a csapatot magyarul"
+    "description": "Hogyan segíti ez a csapatot a REM megvilágosodás során"
   },
   "newMcp": {
-    "name": "Új MCP szerver javaslat neve magyarul",
+    "name": "Új MCP szerver javaslat nave magyarul",
     "url": "http://localhost:5035/api",
-    "description": "Leírás arról, mit tud ez az integráció",
+    "description": "Leírás",
     "capabilities": ["funkcio1", "funkcio2"]
   }
 }

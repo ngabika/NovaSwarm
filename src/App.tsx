@@ -15,6 +15,7 @@ import { BinanceDashboard } from "./components/BinanceDashboard";
 import { DocsOta } from "./components/DocsOta";
 import { DeepResearch } from "./components/DeepResearch";
 import SystemManager from "./components/SystemManager";
+import { SetupWizard } from "./components/SetupWizard";
 import { 
   Sparkles, 
   BrainCircuit, 
@@ -211,6 +212,20 @@ export default function App() {
     fetchState(true);
   };
 
+  const handleSetupComplete = async (data: any) => {
+    try {
+      const res = await fetch("/api/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error("Sikertelen mentés a Setup Wizardban.");
+      await fetchState();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
   // Switch rendered tabs
   const renderTabContent = () => {
     if (!state) return null;
@@ -345,6 +360,10 @@ export default function App() {
         </p>
       </div>
     );
+  }
+
+  if (state && !state.settings.setupCompleted) {
+    return <SetupWizard onComplete={handleSetupComplete} />;
   }
 
   return (

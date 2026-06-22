@@ -286,7 +286,7 @@ export function DocsOta({ onRefreshState, language, updateAvailable, latestCommi
             <div className="flex justify-between items-center bg-slate-900 border border-slate-800 p-3 rounded-xl">
               <div>
                 <span className="text-[10px] text-slate-450 uppercase font-mono block">{t.gitVer}</span>
-                <span className="text-xl font-extrabold text-indigo-400 font-mono">v2.0.1 (Swarm Command &amp; Control Release)</span>
+                <span className="text-xl font-extrabold text-indigo-400 font-mono">v2.0.3 (Swarm Command &amp; Control Release)</span>
               </div>
               <span className="bg-emerald-950/60 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded border border-emerald-800/40 font-mono uppercase">
                 PRODUCTION STABLE

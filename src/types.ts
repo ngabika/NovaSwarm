@@ -56,6 +56,9 @@ export interface Settings {
   openRouterApiKeysPool?: string[];
   telegramBotToken: string;
   telegramChatId: string;
+  setupCompleted?: boolean;
+  userName?: string;
+  userBio?: string;
   isBotActive: boolean;
   teamActive: boolean;
   checkIntervalSeconds: number;

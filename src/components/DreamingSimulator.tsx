@@ -76,10 +76,10 @@ export function DreamingSimulator({
             Belső Reflexió &amp; Öntanulás
           </span>
           <h2 className="text-2xl font-bold text-white tracking-tight">
-            Ágensek Álmodozási Fázisa (Dreaming Mode)
+            OpenClaw Struktúrájú Álmodozás (Dreaming)
           </h2>
           <p className="text-slate-300 text-sm leading-relaxed">
-            Az álom fázisban az ágensek belső kognitív reflexiókat futtatnak a meglévő audit logok, memóriák és korábbi Kanban feladatok alapján. Ez alatt önállóan hoznak létre új ágens képességeket (Skilleket), fedeznek fel külső eszközcsatlakozásokat (MCP) és szintetizálnak mélyebb összefüggéseket a memóriatárba.
+            Az álom fázisban az ágensek belső kognitív reflexiókat futtatnak (Light, Deep, és REM fázisok) a meglévő audit logok, memóriák és korábbi Kanban feladatok alapján. Ez alatt önállóan állítanak elő tartós emlékeket, és fedeznek fel külső eszközcsatlakozásokat (MCP).
           </p>
         </div>
       </div>
