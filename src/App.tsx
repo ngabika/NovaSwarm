@@ -435,7 +435,7 @@ export default function App() {
             { id: "dream", label: lang === "hu" ? "Álmodozás ✨" : "Dreaming ✨", icon: <Sparkles className="w-4 h-4 text-purple-400" /> },
             { id: "deep-research", label: getTranslation(lang, "research") + " 🔍", icon: <Search className="w-4 h-4 text-cyan-400" /> },
             { id: "logs", label: getTranslation(lang, "logs"), icon: <Terminal className="w-4 h-4" /> },
-            { id: "system-mgmt", label: lang === "hu" ? "Mentés & Rendszer 🛡️" : "Backup & System 🛡️", icon: <Database className="w-4 h-4 text-rose-450" /> },
+            { id: "system-mgmt", label: lang === "hu" ? "Mentés & Rendszer 🛡️" : "Backup & System 🛡️", icon: <Database className="w-4 h-4 text-rose-500" /> },
             { id: "docs_ota", label: lang === "hu" ? "Tudástár & OTA 📡" : "Knowledge Base & OTA 📡", icon: <BookOpen className="w-4 h-4 text-indigo-400" />, indicator: state?.otaUpdateAvailable },
             { id: "settings", label: getTranslation(lang, "settings"), icon: <SettingsIcon className="w-4 h-4" /> }
           ].map(tab => (

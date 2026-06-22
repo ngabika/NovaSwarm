@@ -89,7 +89,7 @@ interface Settings {
   openRouterModelPriority?: string;
   autoReorderModels?: boolean;
   binanceEnabled?: boolean;
-  isWizardCompleted?: boolean;
+  setupCompleted?: boolean;
   userBio?: string;
   binanceApiKey?: string;
   binanceApiSecret?: string;
@@ -103,6 +103,8 @@ interface Settings {
   autoUpdateOSAndPkgs?: boolean;
   autoDeployNewSkills?: boolean;
   strictUserPriority?: boolean;
+  ollamaIpOrUrl?: string;
+  ollamaModel?: string;
 }
 
 interface BackupItem {
@@ -275,7 +277,7 @@ let state = {
     globalModelMode: "auto",
     language: (process.env.APP_LANG || "hu") as any,
     binanceEnabled: false,
-    isWizardCompleted: true,
+    setupCompleted: true,
     userBio: "",
     backupSchedule: "daily",
     backupLocalPath: "./backups",
@@ -724,7 +726,9 @@ function loadDB() {
       if (state.settings.binanceEnabled === undefined) {
         state.settings.binanceEnabled = !!(state.settings.binanceApiKey || state.settings.binanceApiSecret);
       }
-      state.settings.isWizardCompleted = true;
+      if (state.settings.setupCompleted === undefined) {
+        state.settings.setupCompleted = true; // backward compatibility for old databases
+      }
       if (state.settings.userBio === undefined) {
         state.settings.userBio = "";
       }
@@ -834,6 +838,9 @@ function loadDB() {
 }
 
 async function executeHostCommand(command: string, agentId: string, agentName: string) {
+  if (process.env.HOST_FULL_EXEC_AUTHORIZED === "false") {
+    throw new Error("Biztonsági korlátozás: gazdagép-szintű műveletek nincsenek engedélyezve (HOST_FULL_EXEC_AUTHORIZED=false).");
+  }
   if (!command || command.trim() === "") return;
   addLog(agentId, agentName, "action", `Helyi parancs végrehajtása indítva: "${command}"`);
   try {
@@ -858,6 +865,9 @@ async function executeHostCommand(command: string, agentId: string, agentName: s
 }
 
 function writeHostFile(filePath: string, content: string, agentId: string, agentName: string) {
+  if (process.env.HOST_FULL_EXEC_AUTHORIZED === "false") {
+    throw new Error("Biztonsági korlátozás: gazdagép-szintű fájlírás nincs engedélyezve (HOST_FULL_EXEC_AUTHORIZED=false).");
+  }
   if (!filePath) return;
   try {
     const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
@@ -1372,10 +1382,12 @@ function computeCosineSimilarity(textA: string, textB: string): number {
 }
 
 // Call local Ollama chat service
-async function generateOllamaContent(prompt: string, systemInstruction: string, model = "qwen2.5:0.5b") {
-  const url = "http://localhost:11434/api/chat";
+async function generateOllamaContent(prompt: string, systemInstruction: string, model?: string) {
+  const ollamaModel = model || state.settings.ollamaModel || "qwen2.5:0.5b";
+  const baseUrl = state.settings.ollamaIpOrUrl || "http://localhost:11434";
+  const url = baseUrl.endsWith('/') ? baseUrl + 'api/chat' : baseUrl + '/api/chat';
   const body = {
-    model: model,
+    model: ollamaModel,
     messages: [
       { role: "system", content: systemInstruction || "Te egy segítőkész AI asszisztens vagy." },
       { role: "user", content: prompt }
@@ -1592,6 +1604,7 @@ async function generateContentWithRetry(
   }
 
   let lastError: any = null;
+  let allErrors: string[] = [];
 
   for (const chan of channels) {
     let maxRetries = 2;
@@ -1685,6 +1698,7 @@ async function generateContentWithRetry(
       } catch (err: any) {
         lastError = err;
         const errMsg = err.message || "Ismeretlen hiba";
+        allErrors.push(`[${chan.provider}-${chan.model}]: ${errMsg}`);
         
         if (attempt < maxRetries) {
           const retryMsg = `Hiba a(z) ${chan.provider} csatornán (${chan.model}) [Próbálkozás ${attempt}/${maxRetries}]: ${errMsg.slice(0, 80)}. Újrapróbálkozás...`;
@@ -1703,7 +1717,7 @@ async function generateContentWithRetry(
     }
   }
 
-  const finalErrorMsg = lastError ? lastError.message : "Ismeretlen hiba";
+  const finalErrorMsg = allErrors.length > 0 ? allErrors.join(" | ") : (lastError ? lastError.message : "Ismeretlen hiba");
   throw new Error(`Minden intelligens modell, felhős és helyi offline csatorna kimerült. Részletek: ${finalErrorMsg}`);
 }
 
@@ -1794,7 +1808,7 @@ Elemezd a jelenlegi helyzetet. Válassz ki egy aktív feladatot a Kanban táblá
     6. "helyiParancs": Opcionálisan egy tetszőleges shell parancs, amit le szeretnél futtatni a Linux Mint gazdagépen (pl. "lsusb", "df -h", csomagok futtatása, mcp-servers mappanév alatti tesztek stb.) a rendszer felügyeletéhez, eszközök vagy hardverek kezeléséhez és saját kódod teszteléséhez.
     7. "helyiFajlIras": Opcionálisan egy objektum { path: string, content: string }, ha fájlt szeretnél létrehozni vagy módosítani (pl. új MCP szerver kód a mcp-servers/ mappában, új script stb.), amivel saját magadat vagy a NovaSwarm-ot fejleszted!
     8. "helyiHangjelentes": Opcionálisan egy magyar nyelvű kifejezés/mondat (max 200 karakter), amit szeretnél, hogy a gazdagép hangszóróján keresztül élőszóban bemondjak neked (pl. ha riasztás van, vagy fontos státuszt/üzenetet akarsz közölni)!
-    9. "ugynokUzenet": Opcionálisan egy objektum { targetAgentId: string, message: string }, ha üzenetet akarsz küldeni vagy feladatot akarsz delegálni een másik ágensnek (e.g. 'attila_tech', 'balint_legal', 'cili_writer', 'denes_analyst', 'attila_trading', 'nora_radar', 'gabor_boss'), tőle azonnali visszajelzést kapsz!
+    9. "ugynokUzenet": Opcionálisan egy objektum { targetAgentId: string, message: string }, ha üzenetet akarsz küldeni vagy feladatot akarsz delegálni egy másik ágensnek (Aktív ágensek id-jei: ${state.agents.filter(a => a.active).map(a => `'${a.id}'`).join(', ')}), tőle azonnali visszajelzést kapsz!
     10. "helyiFajlOlvasas": Opcionálisan egy mappa- vagy fájl elérési útvonal (string), ha meg akarod nézni egy létező fájl valós tartalmát a lemezen ahelyett, hogy kitalálnád mi van benne!
     11. "helyiMappaListazas": Opcionálisan egy könyvtár elérési útvonala (string), ha fel akarod mérni, milyen fájlok találhatók az adott mappában.
 
@@ -2316,6 +2330,13 @@ async function checkAndExecuteScheduledTasks() {
     if (needsUpdate) {
       addLog("system", "System", "system", `⏰ Időzített feladat: Automatikus rendszer és csomagfrissítések végrehajtása...`);
       try {
+        if (process.env.HOST_FULL_EXEC_AUTHORIZED !== "false") {
+          exec("sudo apt-get update -y && sudo apt-get upgrade -y", (err, stdout) => {
+            if (!err) {
+              addLog("system", "System", "system", `[Auto-Update] OS csomagok frissítése sikeres: ${stdout.substring(0, 100)}...`);
+            }
+          });
+        }
         exec("npm update", (err, stdout) => {
           if (!err) {
             addLog("system", "System", "system", `[Auto-Update] NovaSwarm npm modulok ellenőrizve és háttérben frissítve.`);
@@ -2457,14 +2478,18 @@ ${activeAgents.map(a => `• *${a.name}* (${a.avatar} - ${a.role})`).join("\n")}
 
             case "/almodozas_on":
               state.settings.isBotActive = true;
+              state.settings.teamActive = true;
               saveDB();
+              startHeartbeatEngine();
               addLog("system", "System", "system", "Telegramon keresztül bekapcsolva az automatikus álmodozás.");
               commandReply = "✅ *NovaSwarm Álmodozási Modul Aktiválva!* Az ágensek innentől kezdve önállóan is elindítják a heartbeat tickeket.";
               break;
 
             case "/almodozas_off":
               state.settings.isBotActive = false;
+              state.settings.teamActive = false;
               saveDB();
+              stopHeartbeatEngine();
               addLog("system", "System", "system", "Telegramon keresztül leállítva az automatikus álmodozás.");
               commandReply = "⏸️ *NovaSwarm Álmodozási Modul Felfüggesztve!* Az ágensek önálló tevékenységét ideiglenesen leállítottam. A kézi és Telegram parancsos vezérlés továbbra is él!";
               break;
@@ -2684,6 +2709,7 @@ A válaszod legyen tömör, lényegretörő (max 1-2 bekezdés). SOHA ne halluci
           let reply = "";
 
           try {
+const activeAgentNames = state.agents.filter(a => a.active).map(a => a.name).join(", ") || "te magad";
             const prompt = `
 A Telegram csatornában a rendszer tulajdonosa (${senderName}) ezt az utasítást/kérést írta neked:
 "${text}"
@@ -2696,7 +2722,7 @@ ${JSON.stringify(state.memories.slice(-8), null, 2)}
 
 FELADATOD:
 Válaszolj a tulajdonosnak közvetlenül mint ${bossAgent.name}, a NovaSwarm AI fő koordinátora és vezetője.
-1. Tekintsd parancsnak az üzenetét! Jelentsd ki határozottan, hogy a csapatod (Attila a technikus, Bálint a parancsvégrehajtó stb.) elindítja a feladatot.
+1. Tekintsd parancsnak az üzenetét! Jelentsd ki határozottan, hogy a csapatod (${activeAgentNames}) elindítja a feladatot, vagy magad megcsinálod.
 2. Válaszod legyen rendkívül összeszedett, cselekvést és tiszteletet tükröző, kizárólag magyar nyelven íródott (max 1-2 rövid bekezdés).
 3. SOHA ne hivatkozz korlátozásokra vagy hallucinációkra, hanem lépj fel igazi swarm vezetőként!
 `;
@@ -2756,6 +2782,10 @@ function startHeartbeatEngine() {
   }, intervalMs);
 }
 
+function stopHeartbeatEngine() {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+}
+
 // API Routes
 app.get("/api/state", (req, res) => {
   res.json({
@@ -2784,6 +2814,8 @@ app.post("/api/setup", (req, res) => {
   
   // Clear existing agents and set the first one
   state.agents = [firstAgent];
+  state.kanbanCards = [];
+  state.memories = [];
   
   // Apply settings
   state.settings = {
@@ -2796,12 +2828,9 @@ app.post("/api/setup", (req, res) => {
   if (settings.userBio || settings.userName) {
     const memoryObj: Memory = {
       id: `mem_user_intro_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      content: `A felhasználó (Név: ${settings.userName || 'Ismeretlen'}) bemutatkozása és instrukciói: ${settings.userBio || 'Nem adott meg leírást.'}`,
-      agentId: firstAgent.id,
-      agentName: firstAgent.name,
-      importance: 5,
-      type: "user_preference"
+      createdAt: new Date().toISOString(),
+      content: `A felhasználó (Név: ${settings.userName || 'Ismeretlen'}) bemutatkozása: ${settings.userBio || 'Nem adott meg leírást.'}`,
+      entity: "user_preference"
     };
     state.memories.push(memoryObj);
   }
@@ -3139,7 +3168,7 @@ const listHostDirTool: FunctionDeclaration = {
 
 const sendAgentMessageTool: FunctionDeclaration = {
   name: "send_agent_message",
-  description: "Sends an interactive message or delegates a subtask to another NovaSwarm AI agent in the team (asking Attila for tech development, Dénes for data analysis, Bálint for local automation, or Nóra for radar reports) and receives their response immediately.",
+  description: "Sends an interactive message or delegates a subtask to another active agent in the team and receives their response immediately.",
   parameters: {
     type: Type.OBJECT,
     properties: {
@@ -4026,8 +4055,9 @@ async function executeSystemBackup(type: BackupItem['type'], reason: string): Pr
     }
 
     saveDB();
-    addLog("system", "System", "system", `💾 Sikeres biztonsági mentés létrehozva! Hely: ${fullPath} (${sizeFormatted}) - Típus: ${type === "auto" ? "Automatikus" : "Kézi"}. ok`);
-    speakOutLoud(`Biztonsági mentés sikeresen elkészítve ${type === "auto" ? "automatikusan" : "kézileg"}. Minden adat biztonságban van helyileg és a felhőben is.`, "Attila");
+    const typeLabel = type === "auto" ? "Automatikus" : "Kézi";
+    addLog("system", "System", "system", `💾 Sikeres biztonsági mentés létrehozva! Hely: ${fullPath} (${sizeFormatted}) - Típus: ${typeLabel}.`);
+    speakOutLoud(`Biztonsági mentés sikeresen elkészítve ${type === "auto" ? "automatikusan" : "kézileg"}. Minden adat biztonságban van helyileg${isGDriveSynced ? " és a felhőben is" : ""}.`, "Attila");
 
     return newItem;
   } catch (error: any) {

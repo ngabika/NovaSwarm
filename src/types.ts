@@ -63,13 +63,12 @@ export interface Settings {
   teamActive: boolean;
   checkIntervalSeconds: number;
   lastRunTime?: string;
-  globalModelMode?: string; // "auto" | "gemini-3.5-flash" | "gemini-3.1-pro-preview" | etc.
-  geminiModelPriority?: string; // Comma separated priority string
-  openRouterModelPriority?: string; // Comma separated priority string
-  autoReorderModels?: boolean; // Weekly auto refresh active mode
-  binanceEnabled?: boolean; // Global toggle to enable/disable Binance trading
-  isWizardCompleted?: boolean; // Flag to indicate if setup wizard is completed
-  userBio?: string; // User's self introduction/bio
+  globalModelMode?: string;
+  geminiModelPriority?: string;
+  openRouterModelPriority?: string;
+  autoReorderModels?: boolean;
+  binanceEnabled?: boolean;
+  isWizardCompleted?: boolean;
   binanceApiKey?: string;
   binanceApiSecret?: string;
   binanceUseRealAccount?: boolean;

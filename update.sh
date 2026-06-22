@@ -137,7 +137,7 @@ try {
     if (!db.memories) { db.memories = []; migrated = true; }
     if (!db.logs) { db.logs = []; migrated = true; }
     if (!db.agents) { db.agents = []; migrated = true; }
-    if (!db.kanbanTasks) { db.kanbanTasks = []; migrated = true; }
+    if (!db.kanbanCards) { db.kanbanCards = []; migrated = true; }
     if (!db.skills) { db.skills = []; migrated = true; }
     if (!db.mcpServers) { db.mcpServers = []; migrated = true; }
     if (!db.settings) { db.settings = {}; migrated = true; }
