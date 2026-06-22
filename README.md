@@ -1,4 +1,4 @@
-# 🤖 NovaSwarm AI - Autonóm Multi-Agent Csapat Kezelő (v1.1.0)
+# 🤖 NovaSwarm AI - Autonóm Multi-Agent Csapat Kezelő (v2.0.1)
 
 <div align="center">
   <img src="./src/assets/images/novaswarm_banner_1782147520316.jpg" alt="NovaSwarm AI Network Architecture Banner" width="100%" max-width="800px" style="border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);" />
@@ -6,7 +6,9 @@
 
 A **NovaSwarm AI** egy teljesen önfenntartó és autonóm többréteges mesterséges intelligencia ügynökszoftver, amelyet arra terveztünk, hogy egy helyi fizikai Linux Mint/Debian szerveren vagy régi laptopon futva teljes felügyeletet biztosítson saját kódmintái, a naptárak, levelezések, pénzügyi tőzsdei folyamatok, valamint a fizikai hardver és szenzorok felett.
 
-A szoftver közvetlen szinkronizációval és beépített **Over-the-Air (OTA) frissítő motorral** rendelkezik, amellyel a GitHubon történő legfrissebb fejlesztések adatvesztés és memóriatörlés nélkül azonnal élesíthetők a helyi kiszolgálón.
+A szoftver közvetlen szinkronizációval és beépített **Over-the-Air (OTA) frissítő motorral** rendelkezik. 
+Hivatalos GitHub repo: [https://github.com/ngabika/NovaSwarm](https://github.com/ngabika/NovaSwarm)
+A memóriatörlés nélkül azonnal élesíthetők a helyi kiszolgálón a frissítések.
 
 ---
 
@@ -129,6 +131,12 @@ sudo systemctl start novaswarm
 ---
 
 ## 📈 Verziótörténet
+
+* **v2.0.1**
+  * **GitHub OTA Checker & Updater**: Háttérfolyamat vizsgálja a távoli [ngabika/NovaSwarm](https://github.com/ngabika/NovaSwarm) gyűjtemény oldalán / repository-n belüli legújabb commitokat és kiadásokat.
+  * Webes UI jelzés és manuális frissítés lehetőség 1 gombnyomással.
+  * Telegram értesítések új frissítés esetén és /update paranccsal a frissítés elindítása!
+  * Integrált MCP hub és egyéni hitelesítési módok kiegészítve Ollama profile támogatással.
 
 * **v1.1.0**
   * **Grounding Auditor ágens (Rezső) életre hívása**: Valós idejű log és memória audit, hallucinációk és hamis szoftvertelepítések azonnali detektálása és korrekciója.

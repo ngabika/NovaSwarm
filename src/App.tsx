@@ -312,6 +312,8 @@ export default function App() {
           <DocsOta
             onRefreshState={() => fetchState(true)}
             language={lang}
+            updateAvailable={state.otaUpdateAvailable}
+            latestCommitInfo={state.otaLatestCommitInfo}
           />
         );
       case "deep-research":
@@ -415,14 +417,14 @@ export default function App() {
             { id: "deep-research", label: getTranslation(lang, "research") + " 🔍", icon: <Search className="w-4 h-4 text-cyan-400" /> },
             { id: "logs", label: getTranslation(lang, "logs"), icon: <Terminal className="w-4 h-4" /> },
             { id: "system-mgmt", label: lang === "hu" ? "Mentés & Rendszer 🛡️" : "Backup & System 🛡️", icon: <Database className="w-4 h-4 text-rose-450" /> },
-            { id: "docs_ota", label: lang === "hu" ? "Tudástár & OTA 📡" : "Knowledge Base & OTA 📡", icon: <BookOpen className="w-4 h-4 text-indigo-400" /> },
+            { id: "docs_ota", label: lang === "hu" ? "Tudástár & OTA 📡" : "Knowledge Base & OTA 📡", icon: <BookOpen className="w-4 h-4 text-indigo-400" />, indicator: state?.otaUpdateAvailable },
             { id: "settings", label: getTranslation(lang, "settings"), icon: <SettingsIcon className="w-4 h-4" /> }
           ].map(tab => (
             <button
               id={`tab-button-${tab.id}`}
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer select-none ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer select-none relative ${
                 activeTab === tab.id
                   ? "bg-slate-800 text-white shadow-sm border border-slate-700/60"
                   : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/50"
@@ -430,6 +432,12 @@ export default function App() {
             >
               {tab.icon}
               {tab.label}
+              {tab.indicator && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
+              )}
+              {tab.indicator && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              )}
             </button>
           ))}
         </div>

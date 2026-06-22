@@ -17,9 +17,11 @@ import {
 interface DocsOtaProps {
   onRefreshState: () => void;
   language?: string;
+  updateAvailable?: boolean;
+  latestCommitInfo?: string;
 }
 
-export function DocsOta({ onRefreshState, language }: DocsOtaProps) {
+export function DocsOta({ onRefreshState, language, updateAvailable, latestCommitInfo }: DocsOtaProps) {
   const [otaState, setOtaState] = useState<"idle" | "downloading" | "assembling" | "success" | "error">("idle");
   const [otaLog, setOtaLog] = useState("");
   const [gitDetails, setGitDetails] = useState("");
@@ -284,7 +286,7 @@ export function DocsOta({ onRefreshState, language }: DocsOtaProps) {
             <div className="flex justify-between items-center bg-slate-900 border border-slate-800 p-3 rounded-xl">
               <div>
                 <span className="text-[10px] text-slate-450 uppercase font-mono block">{t.gitVer}</span>
-                <span className="text-xl font-extrabold text-indigo-400 font-mono">v1.2.0 (Swarm Command &amp; Control Release)</span>
+                <span className="text-xl font-extrabold text-indigo-400 font-mono">v2.0.1 (Swarm Command &amp; Control Release)</span>
               </div>
               <span className="bg-emerald-950/60 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded border border-emerald-800/40 font-mono uppercase">
                 PRODUCTION STABLE
@@ -320,6 +322,18 @@ export function DocsOta({ onRefreshState, language }: DocsOtaProps) {
             <p className="text-xs text-slate-350 leading-relaxed">
               {t.otaDesc}
             </p>
+
+            {updateAvailable && (
+              <div className="bg-emerald-950/30 p-3 rounded-lg border border-emerald-900/60 mb-3 animate-pulse">
+                <p className="text-emerald-400 font-bold text-xs flex items-center justify-center gap-1.5 mb-1">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Új verzió letölthető!
+                </p>
+                <p className="text-[10px] text-center text-emerald-300 font-mono">
+                  {latestCommitInfo}
+                </p>
+              </div>
+            )}
 
             {otaState === "idle" && (
               <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 text-center py-6 text-xs text-slate-400">

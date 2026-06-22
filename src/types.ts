@@ -95,6 +95,17 @@ export interface BackupItem {
   reason?: string;
 }
 
+export interface McpServerAuth {
+  username?: string;
+  password?: string;
+  apiKey?: string;
+  clientId?: string;
+  clientSecret?: string;
+  token?: string;
+  email?: string;
+  authType?: 'none' | 'oauth2' | 'apikey' | 'basic' | 'password';
+}
+
 export interface McpServer {
   id: string;
   name: string;
@@ -102,6 +113,7 @@ export interface McpServer {
   status: 'connected' | 'disconnected' | 'error';
   description: string;
   capabilities: string[];
+  auth?: McpServerAuth;
 }
 
 export interface AgentSkill {
@@ -175,4 +187,6 @@ export interface DashboardState {
   modelLimits?: ModelRateLimit[];
   binanceState?: BinanceState;
   backups?: BackupItem[];
+  otaUpdateAvailable?: boolean;
+  otaLatestCommitInfo?: string;
 }

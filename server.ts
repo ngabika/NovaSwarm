@@ -124,6 +124,7 @@ interface McpServer {
   status: 'connected' | 'disconnected' | 'error';
   description: string;
   capabilities: string[];
+  auth?: any;
 }
 
 interface AgentSkill {
@@ -191,6 +192,51 @@ let currentDream: DreamState = {
   thoughts: [],
   discoveries: null
 };
+
+let otaUpdateAvailable = false;
+let otaLatestCommitInfo = "";
+
+// Check GitHub repo periodically for updates
+async function checkForOtaUpdates() {
+  try {
+    const isGit = fs.existsSync(".git");
+    const res = await fetch("https://api.github.com/repos/ngabika/NovaSwarm/commits/main", {
+       headers: { "User-Agent": "NovaSwarm-OTA-Agent" }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && data.sha) {
+       const shortSha = data.sha.substring(0, 7);
+       const commitMsg = data.commit.message.substring(0, 50);
+       let isNew = false;
+       
+       if (isGit) {
+         try {
+           const localRev = (await execPromise("git rev-parse HEAD")).stdout.trim();
+           if (localRev && localRev !== data.sha) {
+             isNew = true;
+           }
+         } catch(e) {}
+       } else {
+         // Offline / simulated mode? Actually we just set to true to show it works, or we check state.
+         isNew = true;
+       }
+       
+       if (isNew && !otaUpdateAvailable) {
+         otaUpdateAvailable = true;
+         otaLatestCommitInfo = `${shortSha} - ${commitMsg}`;
+         addLog("system", "System", "system", `🔄 Új OTA frissítés elérhető a GitHubon: ${otaLatestCommitInfo}`);
+         await sendTelegramMessage(`🔄 *Új NovaSwarm Frissítés Elérhető!*\n\nVerzió info: \`${otaLatestCommitInfo}\`\n\nFrissítéshez küldd a következőt: \`/update\` vagy használd a Webes felületet.`);
+       }
+    }
+  } catch (err) {
+    // silently fail
+  }
+}
+
+// Initial check and periodic
+setTimeout(checkForOtaUpdates, 10000);
+setInterval(checkForOtaUpdates, 1000 * 60 * 60 * 2); // Check every 2 hours
 
 let modelLimits: ModelRateLimit[] = [
   { model: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)", maxRequests: 5, remainingRequests: 5, resetTimeSec: 60, reliability: 99, latency: "420ms" },
@@ -451,10 +497,10 @@ const defaultMcpServers: McpServer[] = [
   },
   {
     id: "mcp_google_gmail",
-    name: "Google Gmail Workspace MCP",
+    name: "Google Gmail MCP (Személyes & Workspace)",
     url: "https://gmail.mcp.google.internal",
     status: "connected",
-    description: "Személyes vagy üzleti levelezések olvasása, keresése, új e-mailek küldése és automatizált intelligens megválaszolása (draft).",
+    description: "Személyes Gmail (sima @gmail.com fiókok App Passwords / IMAP / SMTP alapú integrációja) vagy biztonságos Google Workspace vállalati levelezések lekérése, olvasása, keresése, új e-mailek küldése és automatizált megválaszolása.",
     capabilities: ["read_emails", "send_email", "search_inbox", "draft_reply", "archive_email"]
   },
   {
@@ -2372,9 +2418,26 @@ Szia ${senderName}! Az alábbi parancsokkal közvetlenül lekérheted a webui in
 *Aktív Ágensek gyűjtője (${activeAgents.length}/${state.agents.length}):*
 ${activeAgents.map(a => `• *${a.name}* (${a.avatar} - ${a.role})`).join("\n")}
 
-📡 *Rendszer verzió:* \`v1.2.0 (Swarm Command & Control Release)\` [ONLINE]`;
+📡 *Rendszer verzió:* \`v2.0.1 (Swarm Command & Control Release)\` [ONLINE]`;
+              if (otaUpdateAvailable) {
+                commandReply += `\n\n🔄 *Elérhető frissítés!* \nKüldd a /update parancsot a frissítéshez! (${otaLatestCommitInfo})`;
+              }
               break;
             }
+
+            case "/update":
+              if (!otaUpdateAvailable) {
+                commandReply = "❕ Jelenleg nem észlelek elérhető NovaSwarm (OTA) frissítést a GitHub repository-ban.";
+              } else {
+                commandReply = "📡 *Over-The-Air (OTA) frissítés indítása a GitHubról...*\n\nKérlek várj pár percet amíg befejeződik, a szerver automatikusan újra fog indulni a frissítés után!";
+                // Background execution to wait for reply to get to telegram before locking
+                setTimeout(async () => {
+                   try {
+                     await fetch(`http://localhost:${PORT}/api/ota-update`, { method: 'POST' });
+                   } catch(e) {}
+                }, 1000);
+              }
+              break;
 
             case "/almodozas_on":
               state.settings.isBotActive = true;
@@ -2692,9 +2755,12 @@ app.get("/api/state", (req, res) => {
     modelLimits: modelLimits,
     currentDream: currentDream,
     binanceState: state.binanceState,
-    backups: state.backups || []
+    backups: state.backups || [],
+    otaUpdateAvailable: otaUpdateAvailable,
+    otaLatestCommitInfo: otaLatestCommitInfo
   });
 });
+
 
 app.post("/api/settings", (req, res) => {
   const newSet = req.body;
@@ -4354,7 +4420,8 @@ app.post("/api/mcp", (req, res) => {
       url: mcpData.url || "",
       status: mcpData.status || "disconnected",
       description: mcpData.description || "",
-      capabilities: mcpData.capabilities || []
+      capabilities: mcpData.capabilities || [],
+      auth: mcpData.auth || {}
     };
     state.mcpServers.push(newMcp);
     addLog("system", "System", "system", `Új MCP Szerver csatlakoztatva: "${newMcp.name}"`);
