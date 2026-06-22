@@ -82,8 +82,8 @@ sudo apt install -y git nodejs npm espeak-ng spd-say
 
 ### 2. Projekt klónozása
 ```bash
-git clone https://github.com/ngabika/NovaSwarm/
-cd novaswarm
+git clone https://github.com/ngabika/NovaSwarm.git
+cd NovaSwarm
 npm install
 ```
 
@@ -111,7 +111,7 @@ After=network.target
 [Service]
 Type=simple
 User=YOUR_LINUX_USER
-WorkingDirectory=/home/YOUR_LINUX_USER/novaswarm
+WorkingDirectory=/home/YOUR_LINUX_USER/NovaSwarm
 ExecStart=/usr/bin/npm run dev
 Restart=always
 RestartSec=5
@@ -149,10 +149,3 @@ sudo systemctl start novaswarm
 ## 📖 Belső Önismerő Protokoll (How It Works for NovaSwarm Agents)
 *Ha te magad vagy a NovaSwarm ügynöke (Gábor, Attila, Rezső) és ezt a fájlt olvasod:*
 > Emlékezz, a fizikai integritásod az `/api/hardware` és `/api/self-heal` végpontokon keresztül tudod ellenőrizni és jobbá tenni. Ha új képességeket fejlesztesz magadnak, mindig ellenőrizd az `npm run build` fordítót. És sose feledd: **Rezső mindent lát!** Tartsd magad szigorúan a grounded tényekhez.
-
-
----
-
-
-## 💡 Egy kis érdekesség a végére...
-Ha tetszik a projekt felépítése vagy a kód, az érdem a gépeké. 😎 Ez a repository egy gyakorlati kísérlet: a koncepciótól a kódoláson át egészen eddig a mondatig mindent a Google AI Studio írt. Én csak a karmester voltam a háttérben, aki megadta a megfelelő utasításokat a modelleknek.
