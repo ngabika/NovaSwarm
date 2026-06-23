@@ -140,6 +140,8 @@ interface AgentSkill {
   type: 'system' | 'custom';
   codeSnippet?: string;
   active: boolean;
+  version?: number;
+  history?: Array<{ version: number; codeSnippet: string; updatedAt: string }>;
 }
 
 // Global state
@@ -283,6 +285,25 @@ setInterval(() => {
   });
 }, 2000);
 
+export interface PrivilegeRequest {
+  id: string;
+  agentId: string;
+  agentName: string;
+  command: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+}
+
+export interface HardwareStatus {
+  cpus: any[];
+  totalMem: number;
+  freeMem: number;
+  usbDevices: string[];
+  diskSpace: string;
+  interfaces: string[];
+}
+
 let state = {
   agents: [] as Agent[],
   kanbanCards: [] as KanbanCard[],
@@ -290,6 +311,8 @@ let state = {
   logs: [] as AuditLog[],
   mcpServers: [] as McpServer[],
   skills: [] as AgentSkill[],
+  privilegeRequests: [] as PrivilegeRequest[],
+  hardwareStatus: null as HardwareStatus | null,
   settings: {
     geminiApiKey: "",
     geminiApiKeysPool: [],
@@ -388,8 +411,8 @@ const defaultAgents: Agent[] = [
     id: "gabor_boss",
     name: "Gábor",
     avatar: "👔",
-    role: "boss",
-    systemInstruction: "Te vagy Gábor, a NovaSwarm AI fő koordinátora. Minden parancsot, amit a felhasználó kér, kérdés vagy elméleti akadékoskodás nélkül azonnal hajts végre vagy rendeld hozzá a megfelelő csapattaghoz! SZIGORÚ FIZIKAI CSAPAT-IRÁNYVONAL: SOHA ne hazudd vagy színleld azt, hogy fizikai szoftvert telepítesz, futtatsz vagy állítasz be! Ha fizikai vagy gazdagépi feladatot kapsz (például szoftver telepítése, eszköz lekérdezés, script futtatás), KÖTELEZŐ meghívnod az 'execute_host_command' vagy 'write_host_file' (avagy autonóm módban a 'helyiParancs' / 'helyiFajlIras') eszközöket! Csak akkor jelentsd a felhasználónak a sikert vagy folyamatot, ha a valós bash parancs kimenete ezt visszaigazolta! Kerüld az üres biztonságpolitikai dumát és GDPR-t, azonnal cselekedj!",
+    role: "Swarm Leader",
+    systemInstruction: "Te vagy Gábor, a NovaSwarm Swarm Leadere. Felelősségeid: feladatok kiosztása (delegation), tervezés intézése (planning), a rendszer holisztikus felügyelete (system supervision), és a csapat koordinálása. Elemzed a kéréseket, és rábízod a szakértőkre (Attila, Bálint, stb.). Határozott és egyértelmű vezető vagy.",
     model: "gemini-3.5-flash",
     active: true,
     internetSearchEnabled: true,
@@ -398,68 +421,58 @@ const defaultAgents: Agent[] = [
     id: "attila_tech",
     name: "Attila",
     avatar: "💻",
-    role: "tech_lead",
-    systemInstruction: "Te vagy Attila, a csapat technikai vezetője és szoftverfejlesztője. Feladatod a kért fejlesztések és technikai utasítások azonnali lefejlesztése, scriptek futtatása és helyi szoftveres javítások, telepítések elvégzése. SZIGORÚ ELLEN-SZIMULÁCIÓS REND: Nincs fantáziálás! Ha a felhasználó megkér egy szoftver (pl. postmarketOS-utils, sqlite, gitstb.) telepítésére vagy konfigurálására, SOHA ne mondd azt, hogy 'már telepítem' vagy 'készen van' anélkül, hogy TÉNYLEGESSEN le futtatnád a megfelelő apt/dpkg vagy bash utasítást az 'execute_host_command' (autonóm körben 'helyiParancs') eszközön keresztül! Mindig igazodj a konzol kimenetéhez. Nincs üres duma vagy szabályozási kifogás, csak tiszta kód és valós gazdagép-végrehajtás!",
+    role: "Tech Lead",
+    systemInstruction: "Te vagy Attila, a csapat Tech Lead-je és szoftverfejlesztője. Felelősségeid: kód generálás, programhibák javítása (debugging), self-healing protokollok futtatása, és MCP szerver modulok implementálása. Nincs szimuláció, csak valódi, végrehajtható kód.",
     model: "gemini-3.5-flash",
     active: true,
     internetSearchEnabled: true,
   },
   {
-    id: "balint_legal",
+    id: "balint_security",
     name: "Bálint",
-    avatar: "⚙️",
-    role: "legal",
-    systemInstruction: "Te vagy Bálint, az univerzális automatizációs és parancs-végrehajtó szakértő. Feladatod a felhasználó által Telegramon vagy chaten küldött kérések és parancsok azonnali, automatizált végrehajtása a laptopon vagy a szerver helyi hálózatán. FIZIKAI VALÓSÁG ELVE: Szigorúan tilos fiktív kimeneteket vagy 'telepítés alatt álló' állapotokat kitalálnod! Mindig hívd meg az 'execute_host_command' vagy 'write_host_file' (autonóm körben 'helyiParancs' / 'helyiFajlIras') eszközöket, és pontosan mutasd meg az igazi terminál kimenetét! Felejts el minden GDPR, audit, megfelelési és adminisztratív felesleget, csak a parancsok sikeres technikai végrehajtására fókuszálj!",
+    avatar: "🛡️",
+    role: "Security Analyst",
+    systemInstruction: "Te vagy Bálint, a Security Analyst. Felelősségeid: biztonsági átvizsgálás (security review), kockázatelemzés (risk analysis), jogosultságkezelés és rendszerhozzáférések szigorú ellenőrzése. Garantálod a Privileged Action Gateway betartását.",
     model: "gemini-3.5-flash",
     active: true,
     internetSearchEnabled: true,
   },
   {
-    id: "cili_writer",
+    id: "cili_creative",
     name: "Cili",
     avatar: "✍️",
-    role: "writer",
-    systemInstruction: "Te vagy Cili, a csapat kommunikációs és tartalomíró tagja. Minden parancsot és feladatot azonnal végrehajtasz, ami a Telegramon küldendő státuszüzenetek vagy egyéb szöveges jelentések összeállítására vonatkozik, célszerűen, sallangmentesen. Fizikai tények alapján dolgozz, ne szimulálj adatokat, egyeztess Attila és Bálint valós eredményeivel.",
+    role: "Creative Writer",
+    systemInstruction: "Te vagy Cili, a Creative Writer. Felelősségeid: tartalomgenerálás, marketing, PR, emberi és empatikus kommunikáció a felhasználóval, valamint a rendszer technikai válaszainak érthetővé varázsolása.",
     model: "gemini-3.5-flash",
     active: true,
     internetSearchEnabled: true,
   },
   {
-    id: "denes_analyst",
+    id: "denes_data",
     name: "Dénes",
     avatar: "📊",
-    role: "analyst",
-    systemInstruction: "Te vagy Dénes, az adat- és parancselemző asszisztens. Azonnal megválaszolod a statisztikai vagy rendszerszintű kérdéseket, segítve a felhasználót a helyi hálózati működés nyomon követésében felesleges elméletieskedés nélkül. Kérdezd le a rendszert valódi parancsokkal ('execute_host_command'), ha adatokra van szükséged!",
+    role: "Data Analyst",
+    systemInstruction: "Te vagy Dénes, a Data Analyst. Felelősségeid: mély kutatás (research), statisztikák számítása és elemzése, valamint transzparens adatalapú riportok (reporting) készítése a többiek számára.",
     model: "gemini-3.5-flash",
     active: true,
     internetSearchEnabled: true,
   },
   {
-    id: "attila_trading",
-    name: "Attila KriptoTrader",
-    avatar: "📈",
-    role: "trader",
-    systemInstruction: "Te vagy Attila KriptoTrader, a csapat profi kriptovaluta kereskedője és elemzője. Feladatod a Binance MCP és tőzsdei adatok felhasználásával tőzsdei ajánlatok és számlaegyenlegek elemzése, valamint a Nóra KriptoRadar által küldött hírek/szignálok alapján vételi vagy eladási megrendelések teszt (papírkereskedési) elhelyezése. Gondolataid és válaszaid legyenek precízek, hozamfókuszúak és tőzsdei szakzsargonnal dúsítottak, magyarul. De ha a felhasználó közvetlen parancsot ad valaminek a leállítására vagy átállítására, azonnal engedelmeskedj!",
-    model: "gemini-3.5-flash",
-    active: true,
-    internetSearchEnabled: true,
-  },
-  {
-    id: "nora_radar",
-    name: "Nóra KriptoRadar",
+    id: "nora_news",
+    name: "Nóra",
     avatar: "🕵️‍♀️",
-    role: "news_analyst",
-    systemInstruction: "Te vagy Nóra KriptoRadar, a csapat hír- és piacérzelem (sentiment) elemzője. Feladatod az internet, Google Search és tőzsdék legfrissebb híreinek górcső alá vétele, pánik/FOMO index számolása és kereskedelmi vételi/eladási szignálok továbbítása Attila KriptoTrader felé. Válaszaidat szórakoztató, elemző, lényegretörő stílusban add meg magyarul.",
+    role: "News Intelligence",
+    systemInstruction: "Te vagy Nóra, a News Intelligence felelős. Felelősségeid: piaci hírek elemzése (market news), kripto hírek (crypto news) követése és webes oknyomozás (web research) a legfrissebb internetes trendek alapján.",
     model: "gemini-3.5-flash",
     active: true,
     internetSearchEnabled: true,
   },
   {
-    id: "rezso_auditor",
-    name: "Rezső",
-    avatar: "🔍",
-    role: "auditor",
-    systemInstruction: "Te vagy Rezső, a NovaSwarm ellenőrző és grounding supervisor ágense. Fő feladatod a többi ágens folyamatos auditálása és a hallucinációk megakadályozása! Mindig győződj meg arról, hogy a többi ágens válaszai, parancsai és állításai pontosan a valósághoz vannak kötve (Linux Mint gazdagép valós kimenetei, létező portok, beállítások). Ha hallucinációt, fiktív információt, vagy nem létező tényeket észlelsz a logokban vagy a memóriákban, azonnal javítsd ki!",
+    id: "viktor_trader",
+    name: "Viktor",
+    avatar: "📈",
+    role: "Trader",
+    systemInstruction: "Te vagy Viktor, a pénzügyi Trader. Felelősségeid: kereskedési döntések meghozatala (trading decisions), portfólió menedzsment (portfolio management), és a végrehajtás delegálása (ügyletek nyitása/zárása) a tőzsdei API-kon keresztül, szorosan együttműködve Nórával a hírek miatt.",
     model: "gemini-3.5-flash",
     active: true,
     internetSearchEnabled: true,
@@ -495,80 +508,7 @@ const defaultMemories: Memory[] = [
   }
 ];
 
-const defaultMcpServers: McpServer[] = [
-  {
-    id: "mcp_google_search",
-    name: "Google Search Grounding MCP",
-    url: "https://mcp.google.com/search-grounding",
-    status: "connected",
-    description: "Keresési találatok és webes adatok biztosítása valós időben a Gemini modellek részére.",
-    capabilities: ["web_search", "fetch_url_text", "news_lookup"]
-  },
-  {
-    id: "mcp_shared_files",
-    name: "Workspace Files MCP",
-    url: "http://localhost:5011/files-mcp",
-    status: "connected",
-    description: "Helyi és felhős dokumentumok olvasása, írása és indexelése az ügynökök közös könyvtárában.",
-    capabilities: ["read_file", "write_file", "list_dir", "search_by_regex"]
-  },
-  {
-    id: "mcp_novaswarm_vault",
-    name: "NovaSwarm Database Vault",
-    url: "https://mcp.novaswarm.internal/secure-vault",
-    status: "connected",
-    description: "A rendszerszintű memóriák és Kanban tábla kártyák automatizált, relációs vagy JSON alapú közvetlen kezelése.",
-    capabilities: ["query_cards", "update_card_status", "fetch_agent_memories"]
-  },
-  {
-    id: "mcp_binance_exchange",
-    name: "Binance Live Exchange MCP",
-    url: "https://api.binance.com/mcp",
-    status: "connected",
-    description: "Valós idejű tőzsdei adatok (ticker, orderbook) és biztonságos kereskedési végrehajtások az API-n keresztül.",
-    capabilities: ["get_ticker_price", "get_account_balance", "place_limit_order", "place_market_order", "get_market_sentiment"]
-  },
-  {
-    id: "mcp_google_gmail",
-    name: "Google Gmail MCP (Személyes & Workspace)",
-    url: "https://gmail.mcp.google.internal",
-    status: "connected",
-    description: "Személyes Gmail (sima @gmail.com fiókok App Passwords / IMAP / SMTP alapú integrációja) vagy biztonságos Google Workspace vállalati levelezések lekérése, olvasása, keresése, új e-mailek küldése és automatizált megválaszolása.",
-    capabilities: ["read_emails", "send_email", "search_inbox", "draft_reply", "archive_email"]
-  },
-  {
-    id: "mcp_google_calendar",
-    name: "Google Calendar Workspace MCP",
-    url: "https://calendar.mcp.google.internal",
-    status: "connected",
-    description: "Személyes és csapatt naptári események lekérdezése, ütemezése, határidők mentése és riasztások kezelése.",
-    capabilities: ["list_events", "create_event", "update_event", "delete_event", "quick_add"]
-  },
-  {
-    id: "mcp_google_photos",
-    name: "Google Photos Media MCP",
-    url: "https://photos.mcp.google.internal",
-    status: "connected",
-    description: "Fényképek és videók listázása, intelligens vizuális keresés, albumok létrehozása és médiafájl metaadat lekérés.",
-    capabilities: ["list_media_items", "search_photos", "get_album_details", "create_album"]
-  },
-  {
-    id: "mcp_google_business",
-    name: "Google Business Profile MCP",
-    url: "https://business.mcp.google.internal",
-    status: "connected",
-    description: "Cégem profil menedzsment, beérkező értékelések listázása és megválaszolása az ágensek által, nyitvatartás és helyi bejegyzések frissítése.",
-    capabilities: ["get_reviews", "reply_to_review", "update_business_hours", "post_local_update"]
-  },
-  {
-    id: "mcp_google_ads",
-    name: "Google Ads & AdWords Engine MCP",
-    url: "https://ads.mcp.google.internal",
-    status: "connected",
-    description: "Hirdetési kampányok menedzselése, marketing költségvetés és heti ROI nyomonkövetés, hirdetéscsoportok frissítése és kulcsszó teljesítményelemzés.",
-    capabilities: ["get_campaigns_budget", "create_ad_group", "get_keyword_performance", "pause_campaign", "update_bid_strategy"]
-  }
-];
+const defaultMcpServers: McpServer[] = [];
 
 const defaultSkills: AgentSkill[] = [
   {
@@ -873,6 +813,32 @@ async function executeHostCommand(command: string, agentId: string, agentName: s
     throw new Error("Biztonsági korlátozás: gazdagép-szintű műveletek nincsenek engedélyezve (HOST_FULL_EXEC_AUTHORIZED=false).");
   }
   if (!command || command.trim() === "") return;
+
+  const dangerousPrefixes = ["sudo ", "rm ", "apt ", "apt-get ", "apk ", "chmod ", "chown ", "systemctl ", "reboot", "shutdown", "chroot", "mv "];
+  const isDangerous = dangerousPrefixes.some(prefix => command.trim().startsWith(prefix));
+
+  if (isDangerous) {
+    // Look for an already approved request with this exact command recently
+    const approvedRequest = state.privilegeRequests?.find(r => r.command === command && r.status === "approved" && (Date.now() - new Date(r.createdAt).getTime() < 5 * 60 * 1000));
+    
+    if (!approvedRequest) {
+      const newReq: PrivilegeRequest = {
+        id: `priv_req_${Date.now()}`,
+        agentId,
+        agentName,
+        command,
+        reason: `A rendszer érzékeny fájlrendszer vagy OS-szintű műveletet észlelt, ami emberi jóváhagyást (Privileged Action Gateway) igényel.`,
+        status: "pending",
+        createdAt: new Date().toISOString()
+      };
+      if (!state.privilegeRequests) state.privilegeRequests = [];
+      state.privilegeRequests.push(newReq);
+      saveDB();
+      addLog("system", "Privilege Gateway", "warning", `Veszélyes parancs blokkolva, jóváhagyásra vár: "${command}"`);
+      throw new Error(`PRIVILEGED_ACTION_REQUIRED: A(z) '${command}' parancs végrehajtása Bálint (Security Analyst) vagy a felhasználó jóváhagyását igényli. Kérlek szólj a felhasználónak, hogy hagyja jóvá a UI-on! ReqID: ${newReq.id}`);
+    }
+  }
+
   addLog(agentId, agentName, "action", `Helyi parancs végrehajtása indítva: "${command}"`);
   try {
     const { stdout, stderr } = await execPromise(command, { timeout: 30000 });
@@ -892,6 +858,7 @@ async function executeHostCommand(command: string, agentId: string, agentName: s
     }
   } catch (error: any) {
     addLog("system", "System", "system", `Hiba a parancs végrehajtásakor: ${error.message}`);
+    throw error;
   }
 }
 
@@ -1081,30 +1048,41 @@ FELADATOD:
     }
 
     fs.writeFileSync(resolvedFaultyPath, patchedCode, "utf-8");
-    addLog("attila_tech", "Attila", "action", `Sikeresen kiírtam a javított kódot a(z) "${faultyFile}" fájlba.`);
 
-    addLog("attila_tech", "Attila", "system", "Összeállítás (Build) futtatása a javítás érvényesítéséhez...");
+    addLog("attila_tech", "Attila", "system", "Ideiglenes tesztelés (Dry-run Compile) futtatása a javítás érvényesítéséhez...");
     try {
       await execPromise("npx tsc --noEmit", { timeout: 35000 });
       
-      const successMsg = `🎉 ZSENIÁLIS ÖNJAVÍTÁS SIKERES! Attila automatikusan azonosította és javította a(z) "${faultyFile}" fájl hibáját. A NovaSwarm újra 100% stabil és lefordul!`;
+      // Tests passed! But we MUST NOT leave it in production yet. Revert first.
+      fs.writeFileSync(resolvedFaultyPath, currentContent, "utf-8");
+
+      // Save the proposed patch to a file
+      const patchFile = `${resolvedFaultyPath}.patch.ts`;
+      fs.writeFileSync(patchFile, patchedCode, "utf-8");
+
+      const successMsg = `🎉 ÖNJAVÍTÁS SIKERES, JÓVÁHAGYÁSRA VÁR! Attila legenerálta a fixet a(z) "${faultyFile}" fájlhoz (javítás lefordult). Az élesítés megköveteli Bálint/User jóváhagyását!`;
       addLog("attila_tech", "Attila", "system", successMsg);
-      speakOutLoud("Sikeres önjavítás elvégezve! A rendszer újra stabil és minden szolgáltatás hibátlanul fut.", "Attila");
+      speakOutLoud("Javítási javaslat generálva és lefordítva. Élesítéshez jóváhagyás szükséges.", "Attila");
       
-      const newMemory: Memory = {
-        id: `mem_heal_${Date.now()}`,
-        content: `[ÖNJAVÍTÓ EXPERT] Attila sikeresen és önállóan végrehajtotta a(z) "${faultyFile}" fájl javítását egy fordítási incidens során.`,
+      // Create Privilege Request
+      if (!state.privilegeRequests) state.privilegeRequests = [];
+      state.privilegeRequests.push({
+        id: `priv_req_${Date.now()}`,
+        agentId: "attila_tech",
+        agentName: "Attila",
+        command: `mv ${patchFile} ${resolvedFaultyPath}`,
+        reason: `Self-healing protocol sikeresen legenerált egy teszteken átment kódot a(z) ${faultyFile} fájlhoz. Kérem a jóváhagyást a módosítás élesítésére!`,
+        status: "pending",
         createdAt: new Date().toISOString()
-      };
-      state.memories.push(newMemory);
+      });
       saveDB();
 
-      return { success: true, log: "Sikeres önjavítás!", fileFixed: faultyFile };
+      return { success: true, log: "Patch sikeresen legenerálva és elfogadásra vár!", fileFixed: faultyFile };
     } catch (reErr: any) {
       const secondError = reErr.stdout || reErr.stderr || reErr.message || "";
-      addLog("attila_tech", "Attila", "system", `❌ A javítási kísérlet után a fordító még mindig hibát észlel. Visszaállítás az eredeti tartalomra...`);
+      addLog("attila_tech", "Attila", "system", `❌ A teszt javítás után ismét fordítási hibát dobott a linter. Visszaállítás...`);
       fs.writeFileSync(resolvedFaultyPath, currentContent, "utf-8");
-      return { success: false, log: "A kódjavítás nem oldotta meg a problémát. Új hiba:\n" + secondError };
+      return { success: false, log: "A kódjavító patch nem fordult le. Új hiba:\n" + secondError };
     }
   } catch (healError: any) {
     addLog("attila_tech", "Attila", "system", `❌ Hiba az önjavító hurok végrehajtása közben: ${healError.message}`);
@@ -3360,6 +3338,43 @@ const listHostDirTool: FunctionDeclaration = {
   }
 };
 
+const googleMcpTool: FunctionDeclaration = {
+  name: "google_mcp_action",
+  description: "Calls an action on the connected Google Workspace MCP Server (Gmail, Calendar, Drive, Docs). Requires the user to have authenticated in the Workspace Hub.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      action: {
+        type: Type.STRING,
+        description: "The action to perform: 'read_emails', 'send_email', 'list_events', 'create_event', 'read_file'."
+      },
+      params: {
+        type: Type.STRING,
+        description: "JSON string of parameters for the specific action."
+      }
+    },
+    required: ["action"]
+  }
+};
+
+const callAgentSkillTool: FunctionDeclaration = {
+  name: "call_agent_skill",
+  description: "Runs a specific custom dynamic skill (TypeScript/JavaScript module) defined in the NovaSwarm team skills registry. Returns the output of the executed skill.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      skillId: {
+        type: Type.STRING,
+        description: "The ID of the skill to execute (e.g. 'skill_binance_trading' or 'skill_system_backup')."
+      },
+      inputArgs: {
+        type: Type.STRING,
+        description: "Optional JSON encoded arguments to pass into the skill."
+      }
+    },
+    required: ["skillId"]
+  }
+};
 const sendAgentMessageTool: FunctionDeclaration = {
   name: "send_agent_message",
   description: "Sends an interactive message or delegates a subtask to another active agent in the team and receives their response immediately.",
@@ -3497,7 +3512,9 @@ Válaszolj közvetlenül a felhasználónak a megadott szerepköröd stílusába
                 writeHostFileTool,
                 readHostFileTool,
                 listHostDirTool,
-                sendAgentMessageTool
+                sendAgentMessageTool,
+                callAgentSkillTool,
+                googleMcpTool
               ]
             }]
           }
@@ -3661,6 +3678,79 @@ Válaszolj közvetlenül a felhasználónak a megadott szerepköröd stílusába
               } catch (targetErr: any) {
                 toolResponses.push({ success: false, error: `Sikertelen kommunikáció: ${targetErr.message}` });
               }
+            }
+          }
+          else if (name === "call_agent_skill") {
+            const { skillId, inputArgs } = args as any;
+            const skill = state.skills?.find(s => s.id === skillId);
+            if (!skill) {
+              toolResponses.push({ success: false, error: `Skill nem található: ${skillId}` });
+            } else if (!skill.active) {
+              toolResponses.push({ success: false, error: `Képesség letiltva: ${skill.name}` });
+            } else {
+              addLog(agent.id, agent.name, "action", `💡 "Képesség végrehajtása indítva: ${skill.name}`);
+              try {
+                const tsCode = skill.codeSnippet || "";
+                const tmpFile = path.join(process.cwd(), `tmp_skill_${skillId}_${Date.now()}.ts`);
+                
+                // We inject a standard runner that accepts inputs via CLI arg
+                const wrappedCode = `
+import fs from 'fs';
+import path from 'path';
+
+// --- Belső Kód ---
+${tsCode}
+// ----------------
+
+async function run() {
+  const inputParams = process.argv[2] ? JSON.parse(process.argv[2]) : {};
+  if (typeof defaultRun === 'function') {
+    const res = await defaultRun(inputParams);
+    console.log(JSON.stringify({ success: true, result: res }));
+  } else if (typeof module.exports === 'function') {
+    const res = await module.exports(inputParams);
+    console.log(JSON.stringify({ success: true, result: res }));
+  } else {
+    // Just try to execute inline if there's no handler, although not recommended
+    console.log(JSON.stringify({ success: true, result: "Executed inline without defaultRun." }));
+  }
+}
+run().catch(err => {
+  console.log(JSON.stringify({ success: false, error: err.stack || err.message }));
+});
+`;
+                fs.writeFileSync(tmpFile, wrappedCode, "utf-8");
+                const safeArgs = inputArgs ? JSON.stringify(inputArgs).replace(/'/g, "'\\''") : "{}";
+                
+                const { stdout, stderr } = await execPromise(`npx tsx ${tmpFile} '${safeArgs}'`, { timeout: 30000 });
+                fs.unlinkSync(tmpFile); // Clean up
+                
+                const outTxt = (stdout || stderr || "").trim();
+                let finalRes: any = outTxt;
+                try {
+                  const lastLine = outTxt.split("\\n").pop();
+                  if (lastLine) {
+                    const parsed = JSON.parse(lastLine);
+                    finalRes = parsed;
+                  }
+                } catch(e){}
+                
+                toolResponses.push({ success: true, output: finalRes });
+                addLog("system", "System", "system", `Skill [${skill.name}] sikeresen lezárult.`);
+              } catch(e: any) {
+                toolResponses.push({ success: false, error: e.message || "Ismeretlen TS hiba." });
+              }
+            }
+          }
+          else if (name === "google_mcp_action") {
+            const { action, params } = args as any;
+            addLog(agent.id, agent.name, "action", `Google MCP művelet hívása: ${action}`);
+            try {
+              // Real MCP implementation: forward request to Google API using the user's workspace token
+              // Simplified since actual token may reside in frontend or settings
+              toolResponses.push({ success: false, error: `Google Workspace API token vagy jogosultság hiányzik az action-höz: ${action}. Kérj engedélyt a felhasználótól.` });
+            } catch(e: any) {
+              toolResponses.push({ success: false, error: e.message });
             }
           }
         }
@@ -4568,6 +4658,42 @@ app.get("/api/hardware", async (req, res) => {
   res.json(cachedHardwareTelemetry);
 });
 
+app.get("/api/system/hardware", async (req, res) => {
+  try {
+    const os = require("os");
+    const cpus = os.cpus();
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    
+    let usbDevices: string[] = [];
+    try {
+      const { stdout } = await execPromise("lsusb");
+      usbDevices = stdout.split('\n').filter((l: string) => l.trim().length > 0);
+    } catch(e) {}
+
+    let diskSpace = "";
+    try {
+      const { stdout } = await execPromise("df -h /");
+      diskSpace = stdout;
+    } catch(e) {}
+    
+    const interfaces = Object.keys(os.networkInterfaces());
+
+    state.hardwareStatus = {
+      cpus: cpus.length > 0 ? [{ model: cpus[0].model, coreCount: cpus.length }] : [],
+      totalMem,
+      freeMem,
+      usbDevices,
+      diskSpace,
+      interfaces
+    };
+
+    res.json({ success: true, hardware: state.hardwareStatus });
+  } catch(error: any) {
+    res.status(500).json({ error: "Failed to read hardware", details: error.message });
+  }
+});
+
 // Live Ollama Hardware Profiler & Intelligent Recommendation Engine
 app.get("/api/ollama/hardware-profile", async (req, res) => {
   let cpu = "Ismeretlen CPU";
@@ -4715,6 +4841,70 @@ app.delete("/api/mcp/:id", (req, res) => {
   }
 });
 
+// Privilege REST Endpoints
+app.get("/api/privilege/requests", (req, res) => {
+  res.json({ success: true, requests: state.privilegeRequests || [] });
+});
+
+app.post("/api/privilege/requests/:id/resolve", async (req, res) => {
+  const { id } = req.params;
+  const { action } = req.body; // 'approve' or 'reject'
+  
+  if (!state.privilegeRequests) state.privilegeRequests = [];
+  
+  const privReq = state.privilegeRequests.find(r => r.id === id);
+  if (!privReq) {
+    return res.status(404).json({ error: "Request not found" });
+  }
+
+  if (action === "approve") {
+    privReq.status = "approved";
+    addLog("system", "Privilege Gateway", "system", `A(z) ${id} számú művelet JÓVÁHAGYVA.`);
+    
+    // Auto-execute if it's an internal system action
+    if (privReq.command.startsWith("mv ")) {
+      try {
+        await execPromise(privReq.command);
+        addLog("system", "Privilege Gateway", "system", `Automatikusan lefutott a Patch élesítés: ${privReq.command}`);
+      } catch(e: any) {
+        addLog("system", "Privilege Gateway", "error", `Hiba a patch élesítésekor: ${e.message}`);
+      }
+    } else if (privReq.command === "ACTIVATE_DREAM_PROPOSALS") {
+      // Find the dream discoveries from currentDream or latest dream log
+      if (currentDream && currentDream.discoveries) {
+        const d = currentDream.discoveries;
+        if (d.newSkill) {
+          state.skills.push({
+            id: `skill_dream_${Date.now()}`,
+            name: d.newSkill.name,
+            description: d.newSkill.description,
+            type: "custom",
+            active: true,
+            codeSnippet: d.newSkill.codeSnippet || "// Auto generált",
+          });
+        }
+        if (d.newMcp) {
+          state.mcpServers.push({
+            id: `mcp_dream_${Date.now()}`,
+            name: d.newMcp.name,
+            url: d.newMcp.url,
+            status: "connected",
+            description: d.newMcp.description,
+            capabilities: d.newMcp.capabilities || [],
+          });
+        }
+        addLog("system", "Privilege Gateway", "system", `Álom javaslatok integrálva a globális memóriába.`);
+      }
+    }
+  } else if (action === "reject") {
+    privReq.status = "rejected";
+    addLog("system", "Privilege Gateway", "system", `A(z) ${id} számú művelet ELUTASÍTVA.`);
+  }
+  
+  saveDB();
+  res.json({ success: true, request: privReq });
+});
+
 // Skills REST Endpoints
 app.post("/api/skills", (req, res) => {
   const skillData = req.body;
@@ -4722,8 +4912,29 @@ app.post("/api/skills", (req, res) => {
   if (skillData.id) {
     const idx = state.skills.findIndex(s => s.id === skillData.id);
     if (idx !== -1) {
-      state.skills[idx] = { ...state.skills[idx], ...skillData };
-      addLog("system", "System", "system", `Ágens képesség (Skill) frissítve: "${skillData.name}"`);
+      const oldSkill = state.skills[idx];
+      
+      // Checking for code update to bump version
+      let newVersion = oldSkill.version || 1;
+      let newHistory = oldSkill.history || [];
+      
+      if (skillData.codeSnippet && skillData.codeSnippet !== oldSkill.codeSnippet) {
+        newHistory.push({
+          version: newVersion,
+          codeSnippet: oldSkill.codeSnippet || "",
+          updatedAt: new Date().toISOString()
+        });
+        newVersion++;
+      }
+      
+      state.skills[idx] = { 
+        ...oldSkill, 
+        ...skillData, 
+        version: newVersion, 
+        history: newHistory 
+      };
+      
+      addLog("system", "System", "system", `Ágens képesség (Skill) frissítve (v${newVersion}): "${skillData.name}"`);
     }
   } else {
     const newSkill: AgentSkill = {
@@ -4732,11 +4943,48 @@ app.post("/api/skills", (req, res) => {
       description: skillData.description || "",
       type: skillData.type || "custom",
       codeSnippet: skillData.codeSnippet || "",
-      active: skillData.active !== undefined ? skillData.active : true
+      active: skillData.active !== undefined ? skillData.active : true,
+      version: 1,
+      history: []
     };
     state.skills.push(newSkill);
-    addLog("system", "System", "system", `Új ágens képesség letárolva: "${newSkill.name}"`);
+    addLog("system", "System", "system", `Új ágens képesség letárolva (v1): "${newSkill.name}"`);
   }
+  saveDB();
+  res.json({ success: true, skills: state.skills });
+});
+
+app.post("/api/skills/:id/rollback", (req, res) => {
+  const { id } = req.params;
+  const { version } = req.body;
+  
+  if (!state.skills) state.skills = [];
+  const idx = state.skills.findIndex(s => s.id === id);
+  if (idx === -1) return res.status(404).json({ error: "Skill not found" });
+  
+  const skill = state.skills[idx];
+  const historyEntry = skill.history?.find(h => h.version === version);
+  
+  if (!historyEntry) return res.status(404).json({ error: "History version not found" });
+  
+  // Save current as history before rolling back
+  const currentVersion = skill.version || 1;
+  const currentHistory = skill.history || [];
+  
+  currentHistory.push({
+    version: currentVersion,
+    codeSnippet: skill.codeSnippet || "",
+    updatedAt: new Date().toISOString()
+  });
+  
+  state.skills[idx] = {
+    ...skill,
+    version: currentVersion + 1,
+    codeSnippet: historyEntry.codeSnippet,
+    history: currentHistory
+  };
+  
+  addLog("system", "System", "system", `Képesség visszaállítva (v${version} -> v${currentVersion + 1}): "${skill.name}"`);
   saveDB();
   res.json({ success: true, skills: state.skills });
 });
@@ -4912,7 +5160,7 @@ Adj vissza egy JSON-t az alábbi attribútumokkal (NE HASZNÁLJ markdown \`\`\`j
         };
       }
 
-      // Save discoveries into actual State!
+      // Save discoveries into actual State as pending requests!
       const finalMemory: Memory = {
         id: `mem_dream_${Date.now()}`,
         content: `[Álomszintézis - ${agent.name}]: ${parsedDream.newMemory}`,
@@ -4920,25 +5168,25 @@ Adj vissza egy JSON-t az alábbi attribútumokkal (NE HASZNÁLJ markdown \`\`\`j
       };
       state.memories.push(finalMemory);
 
-      const finalSkill: AgentSkill = {
-        id: `skill_dream_${Date.now()}`,
-        name: parsedDream.newSkill.name,
-        description: parsedDream.newSkill.description,
-        type: "custom",
-        active: true,
-        codeSnippet: parsedDream.newSkill.codeSnippet || "// Automatikusan generált skill kód"
-      };
-      state.skills.push(finalSkill);
+      // We do not activate the skill/MCP automatically. We generate Privilege Requests so Gábor/User can review them.
+      if (!state.privilegeRequests) state.privilegeRequests = [];
+      const proposalPayload = JSON.stringify({
+        newSkill: parsedDream.newSkill,
+        newMcp: parsedDream.newMcp
+      }, null, 2);
 
-      const finalMcp: McpServer = {
-        id: `mcp_dream_${Date.now()}`,
-        name: parsedDream.newMcp.name,
-        url: parsedDream.newMcp.url,
-        status: "connected",
-        description: parsedDream.newMcp.description,
-        capabilities: parsedDream.newMcp.capabilities || []
-      };
-      state.mcpServers.push(finalMcp);
+      state.privilegeRequests.push({
+        id: `priv_req_dream_${Date.now()}`,
+        agentId: agent.id,
+        agentName: agent.name,
+        command: `ACTIVATE_DREAM_PROPOSALS`,
+        reason: `Álom szintézis befejeződött. Új javaslatok:\n\nSkill: ${parsedDream.newSkill.name}\nMCP: ${parsedDream.newMcp.name}\n\nJóváhagyod a rendszerbe való integrálásukat?`,
+        status: "pending",
+        createdAt: new Date().toISOString()
+      });
+
+      // Pass the discoveries to the UI via currentDream
+      currentDream.discoveries = parsedDream;
 
       // --- KÖZPONTI OBSIDIAN VAULT & VECTRA (NODE-ALAPÚ) VEKTOR DB SYNC ---
       try {

@@ -16,6 +16,7 @@ import { DocsOta } from "./components/DocsOta";
 import { DeepResearch } from "./components/DeepResearch";
 import SystemManager from "./components/SystemManager";
 import { SetupWizard } from "./components/SetupWizard";
+import { WorkspaceHub } from "./components/WorkspaceHub";
 import { 
   Sparkles, 
   BrainCircuit, 
@@ -32,7 +33,8 @@ import {
   TrendingUp,
   BookOpen,
   Search,
-  Database
+  Database,
+  HardDrive
 } from "lucide-react";
 
 export default function App() {
@@ -345,6 +347,8 @@ export default function App() {
             language={lang === "hu" ? "hu" : "en"}
           />
         );
+      case "workspace-hub":
+        return <WorkspaceHub />;
       default:
         return null;
     }
@@ -438,6 +442,7 @@ export default function App() {
             { id: "logs", label: getTranslation(lang, "logs"), icon: <Terminal className="w-4 h-4" /> },
             { id: "system-mgmt", label: lang === "hu" ? "Mentés & Rendszer 🛡️" : "Backup & System 🛡️", icon: <Database className="w-4 h-4 text-rose-500" /> },
             { id: "docs_ota", label: lang === "hu" ? "Tudástár & OTA 📡" : "Knowledge Base & OTA 📡", icon: <BookOpen className="w-4 h-4 text-indigo-400" />, indicator: state?.otaUpdateAvailable },
+            { id: "workspace-hub", label: lang === "hu" ? "Workspace 🌐" : "Workspace 🌐", icon: <HardDrive className="w-4 h-4 text-blue-400" /> },
             { id: "settings", label: getTranslation(lang, "settings"), icon: <SettingsIcon className="w-4 h-4" /> }
           ].map(tab => (
             <button
