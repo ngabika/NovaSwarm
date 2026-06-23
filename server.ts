@@ -1305,7 +1305,11 @@ function isModelAcceptable(id: string | undefined): boolean {
       lp.includes("qwen/qwen3") ||
       lp.includes("nousresearch/hermes-3-llama-3.1-405b") ||
       lp.includes("hermes-3-llama") ||
-      lp.includes("north-mini")) {
+      lp.includes("north-mini") ||
+      lp.includes("gpt-oss") ||
+      lp.includes("liquid") ||
+      lp.includes("lfm-") ||
+      lp === "openrouter/free") {
     return false;
   }
   
