@@ -225,14 +225,8 @@ export function McpSkillsHub({
   const testMcpConnection = async (id: string) => {
     setTestingId(id);
     await new Promise(r => setTimeout(r, 900));
-    const srv = mcpServers.find(s => s.id === id);
-    if (srv) {
-      await onSaveMcpServer({
-        id: srv.id,
-        status: srv.status === 'connected' ? 'disconnected' : 'connected'
-      });
-    }
     setTestingId(null);
+    alert("Ez a funkció csak egy UI demó. A valódi lokális MCP szerver validáció és socket kapcsolat kiépítése jelenleg fejlesztés alatt áll (biztonsági okokból le van tiltva).");
   };
 
   // Open credentials panel and pre-fill form

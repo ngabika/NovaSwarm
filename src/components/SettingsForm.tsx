@@ -615,7 +615,7 @@ export function SettingsForm({ settings, modelLimits = [], onSaveSettings, onTes
                               />
                             </div>
                             <span className={`text-xs font-mono min-w-[70px] text-right ${textColor}`}>
-                              {m.remainingRequests} / {m.maxRequests} RPS
+                              {m.remainingRequests.toFixed(1)} / {m.maxRequests} RPS
                             </span>
                           </div>
                         </div>

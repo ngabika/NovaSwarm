@@ -243,6 +243,7 @@ export default function App() {
             lastRunTime={state.settings.lastRunTime}
             onToggleSystem={handleToggleSystem}
             onTriggerTick={handleTriggerTick}
+            language={state.settings.language || "hu"}
           />
         );
       case "agents":

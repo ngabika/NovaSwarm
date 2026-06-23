@@ -169,6 +169,8 @@ export function AgentsList({ agents, onSaveAgent, onDeleteAgent }: AgentsListPro
                 <option value="legal">Legal (Jogi / Compliance)</option>
                 <option value="writer">Content Writer (Copywriting)</option>
                 <option value="analyst">Data Analyst (Adatvizsgálat)</option>
+                <option value="trader">KriptoTrader (Automatizált kereskedő)</option>
+                <option value="news_analyst">KriptoRadar (Hír és Szignál elemző)</option>
                 <option value="system_operator">System Operator (Rendszerüzemeltetés / IT Biztonság)</option>
                 <option value="auditor">Auditor (Grounding Supervisor / Ellenőr)</option>
               </select>

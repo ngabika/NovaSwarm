@@ -323,14 +323,31 @@ if [ "$INSTALL_NODE" = true ]; then
     fi
 fi
 
-# 3. Git
+# 3. Git Environment
 echo -e "${T_GIT_CHECK}"
 if ! command -v git &> /dev/null; then
     echo -e "${YELLOW}${T_GIT_INSTALL}${NC}"
     sudo apt-get install -y git
 fi
 
-# 4. Ollama
+echo -e "[i] Ellenőrzés: Pure Node.js alapú Vector DB (Vectra) használatban. Nincs szükség hibrid Python Vektortér inicializálásra!"
+echo -e "${GREEN}[V] Telepítési fázis beállítva Node fókusszal.${NC}"
+
+# Configure API Key Pre-Commit block hook for security
+mkdir -p .git/hooks
+cat << 'HOOKEOF' > .git/hooks/pre-commit
+#!/bin/bash
+if git diff --cached | grep -iE "(sk-[a-zA-Z0-9]{30,})|(AIzaSy[A-Za-z0-9_-]{33})"; then
+    echo "⚠️ [PRE-COMMIT HOOK] Lehetséges API kulcs szivárgást észleltem a commit-ban. BLOKKOLVA!"
+    exit 1
+fi
+exit 0
+HOOKEOF
+chmod +x .git/hooks/pre-commit
+echo -e "${GREEN}[V] Pre-commit API Shield (OpenClaw Security) aktív.${NC}"
+
+# 4. Ollama Hardware Autotune & Setup
+echo -e "${T_OLLAMA_CHECK}"
 echo -e "${T_OLLAMA_CHECK}"
 if ! command -v ollama &> /dev/null; then
     read -p "${T_OLLAMA_ASK}" install_ollama_ans

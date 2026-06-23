@@ -54,6 +54,9 @@ export interface Settings {
   geminiApiKeysPool?: string[];
   openRouterApiKey?: string;
   openRouterApiKeysPool?: string[];
+  dailyCostLimitUsd?: number;
+  currentDailyCostUsd?: number;
+  costResetDate?: string;
   telegramBotToken: string;
   telegramChatId: string;
   setupCompleted?: boolean;

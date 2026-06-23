@@ -52,6 +52,7 @@ export function BinanceDashboard({ binanceState, settings, onRefreshState }: Bin
     setBacktestRunning(true);
     setBacktestResults(null);
     setTimeout(() => {
+      // NOTE: This is a purely random mock simulator. Historical data fetching and real backtesting is not implemented yet.
       let totalTrades = 0;
       let winRate = 0;
       let ROI = 0;
@@ -511,9 +512,9 @@ export function BinanceDashboard({ binanceState, settings, onRefreshState }: Bin
               <div>
                 <h4 className="text-xs font-bold tracking-widest text-slate-400 font-mono uppercase flex items-center gap-1.5">
                   <Cpu className="w-4 h-4 text-amber-500" />
-                  Kereskedési Robot Beépített Stratégia-Visszatesztelő (Backtester)
+                  Kereskedési Robot Stratégia-Visszatesztelő (Szimulátor)
                 </h4>
-                <p className="text-[10px] text-slate-500 mt-0.5">Teszteld az algoritmikus stratégiákat múltbéli piaci adatokon végrehajtva</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">Teszteld az algoritmikus stratégiákat múltbéli piaci adatokon végrehajtva (Megjegyzés: Randomizált mintaadat demonstráció)</p>
               </div>
               <span className="text-[9px] bg-slate-900 text-amber-400 font-mono font-bold px-2 py-0.5 rounded border border-slate-800">
                 PRO SIMULATOR

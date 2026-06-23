@@ -74,6 +74,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           role: template.role,
           avatar: template.avatar,
           systemInstruction: template.systemInstruction,
+          model: "gemini-3.5-flash",
           active: true
         }
       });

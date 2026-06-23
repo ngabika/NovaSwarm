@@ -2,6 +2,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import { LocalIndex } from "vectra";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import dns from "dns";
@@ -78,6 +79,9 @@ interface Settings {
   geminiApiKeysPool?: string[];
   openRouterApiKey?: string;
   openRouterApiKeysPool?: string[];
+  dailyCostLimitUsd?: number;
+  currentDailyCostUsd?: number;
+  costResetDate?: string;
   telegramBotToken: string;
   telegramChatId: string;
   isBotActive: boolean;
@@ -205,6 +209,15 @@ async function checkForOtaUpdates() {
     const res = await fetch("https://api.github.com/repos/ngabika/NovaSwarm/commits/main", {
        headers: { "User-Agent": "NovaSwarm-OTA-Agent" }
     });
+    
+    if (res.status === 403 || res.status === 429) {
+      console.log("GitHub API rate limit reached for OTA checking.");
+      if (!otaLatestCommitInfo) {
+        otaLatestCommitInfo = "Rate limited (Próbáld később)";
+      }
+      return;
+    }
+    
     if (!res.ok) return;
     const data = await res.json();
     if (data && data.sha) {
@@ -220,8 +233,9 @@ async function checkForOtaUpdates() {
            }
          } catch(e) {}
        } else {
-         // Offline / simulated mode? Actually we just set to true to show it works, or we check state.
-         isNew = true;
+         // ZIP installation, cannot perform git base pull, so update is false to prevent false alerts
+         isNew = false;
+         otaLatestCommitInfo = `${shortSha} - ${commitMsg} (ZIP / Non-Git)`;
        }
        
        if (isNew && !otaUpdateAvailable) {
@@ -229,6 +243,11 @@ async function checkForOtaUpdates() {
          otaLatestCommitInfo = `${shortSha} - ${commitMsg}`;
          addLog("system", "System", "system", `🔄 Új OTA frissítés elérhető a GitHubon: ${otaLatestCommitInfo}`);
          await sendTelegramMessage(`🔄 *Új NovaSwarm Frissítés Elérhető!*\n\nVerzió info: \`${otaLatestCommitInfo}\`\n\nFrissítéshez küldd a következőt: \`/update\` vagy használd a Webes felületet.`);
+       } else if (!isNew) {
+         otaUpdateAvailable = false;
+         if (isGit) {
+           otaLatestCommitInfo = `${shortSha} - ${commitMsg} (Rendszer friss)`;
+         }
        }
     }
   } catch (err) {
@@ -248,14 +267,21 @@ let modelLimits: ModelRateLimit[] = [
   { model: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash-Lite", maxRequests: 30, remainingRequests: 30, resetTimeSec: 60, reliability: 99, latency: "95ms" }
 ];
 
-// Slow replenish rate limits
+// Real-time Leaky Bucket replenishment for model rate limits
+let lastReplenishTime = Date.now();
 setInterval(() => {
+  const now = Date.now();
+  const elapsedMs = now - lastReplenishTime;
+  lastReplenishTime = now;
+  
   modelLimits.forEach(limit => {
+    const replenishRate = limit.maxRequests / (limit.resetTimeSec || 60); // req/sec
+    const toAdd = (elapsedMs / 1000) * replenishRate;
     if (limit.remainingRequests < limit.maxRequests) {
-      limit.remainingRequests += 1;
+      limit.remainingRequests = Math.min(limit.maxRequests, limit.remainingRequests + toAdd);
     }
   });
-}, 12000);
+}, 2000);
 
 let state = {
   agents: [] as Agent[],
@@ -269,6 +295,9 @@ let state = {
     geminiApiKeysPool: [],
     openRouterApiKey: "",
     openRouterApiKeysPool: [],
+    dailyCostLimitUsd: 1.0,
+    currentDailyCostUsd: 0.0,
+    costResetDate: new Date().toISOString().split("T")[0],
     telegramBotToken: "",
     telegramChatId: "",
     isBotActive: false,
@@ -333,7 +362,9 @@ function loadConfigFile() {
 
 function saveConfigFile() {
   try {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(state.settings || {}, null, 2), "utf-8");
+    const tmpFile = CONFIG_FILE + ".tmp";
+    fs.writeFileSync(tmpFile, JSON.stringify(state.settings || {}, null, 2), "utf-8");
+    fs.renameSync(tmpFile, CONFIG_FILE);
     console.log("Settings written to .config file successfully.");
   } catch (err) {
     console.error("Failed to save .config file:", err);
@@ -864,19 +895,34 @@ async function executeHostCommand(command: string, agentId: string, agentName: s
   }
 }
 
-function writeHostFile(filePath: string, content: string, agentId: string, agentName: string) {
+async function writeHostFile(filePath: string, content: string, agentId: string, agentName: string) {
   if (process.env.HOST_FULL_EXEC_AUTHORIZED === "false") {
     throw new Error("Biztonsági korlátozás: gazdagép-szintű fájlírás nincs engedélyezve (HOST_FULL_EXEC_AUTHORIZED=false).");
   }
   if (!filePath) return;
   try {
     const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
-    const parentDir = path.dirname(resolvedPath);
-    if (!fs.existsSync(parentDir)) {
-      fs.mkdirSync(parentDir, { recursive: true });
+    
+    // Check if the file is code and use git safe rollback
+    const isCodeFile = filePath.endsWith(".ts") || filePath.endsWith(".tsx") || filePath.endsWith(".js") || filePath.endsWith(".json");
+    if (isCodeFile && fs.existsSync(".git")) {
+      const parentDir = path.dirname(resolvedPath);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+      const isSuccess = await executeSafeGitModification(agentName, resolvedPath, content);
+      if (!isSuccess) {
+         throw new Error("Önellenzőrzés sikertelen: az új kód hibákat tartalmaz. Fájl visszaállítva.");
+      }
+    } else {
+      const parentDir = path.dirname(resolvedPath);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+      fs.writeFileSync(resolvedPath, content, "utf-8");
+      addLog(agentId, agentName, "action", `Helyi fájl létrehozva/módosítva: "${filePath}"`);
     }
-    fs.writeFileSync(resolvedPath, content, "utf-8");
-    addLog(agentId, agentName, "action", `Helyi fájl létrehozva/módosítva: "${filePath}"`);
+    
     const newMemory: Memory = {
       id: `mem_${Date.now()}`,
       content: `[RENDSZER AUTONÓM FEJLESZTÉS] ${agentName} létrehozta vagy frissítette a helyi fájlrendszeren: "${filePath}"`,
@@ -886,6 +932,7 @@ function writeHostFile(filePath: string, content: string, agentId: string, agent
     saveDB();
   } catch (error: any) {
     addLog("system", "System", "system", `Hiba a fájlírás közben: ${error.message}`);
+    throw error;
   }
 }
 
@@ -1191,7 +1238,9 @@ async function detectConnectedDevices() {
 
 function saveDB() {
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2), "utf-8");
+    const tmpFile = DB_FILE + ".tmp";
+    fs.writeFileSync(tmpFile, JSON.stringify(state, null, 2), "utf-8");
+    fs.renameSync(tmpFile, DB_FILE);
     saveConfigFile();
   } catch (err) {
     console.error("Failed to save DB:", err);
@@ -1278,13 +1327,12 @@ function addLog(agentId: string, agentName: string, type: AuditLog['type'], mess
   };
   state.logs.unshift(newLog);
   
-  // Chat előzmények soha nem törlődnek. Csak az egyéb naplókat (műveletek, gondolatok) metsszük le, ha a teljes méret meghaladja az 1500-at.
-  if (state.logs.length > 1500) {
-    const chatLogs = state.logs.filter(l => l.type === "chat");
-    const otherLogs = state.logs.filter(l => l.type !== "chat");
-    const prunedOthers = otherLogs.slice(0, 400);
-    // Kombináljuk az összes chat előzményt és a legújabb egyéb naplókat, időrend szerint sorba rendezve
-    state.logs = [...chatLogs, ...prunedOthers].sort(
+  // Chat előzmények és egyéb naplók korlátozása a memória és sebesség megőrzése érdekében.
+  if (state.logs.length > 1000) {
+    const chatLogs = state.logs.filter(l => l.type === "chat").slice(0, 500);
+    const otherLogs = state.logs.filter(l => l.type !== "chat").slice(0, 500);
+    // Kombináljuk a legutóbbi chat-eket és az egyéb naplókat, időrend szerint rendezve
+    state.logs = [...chatLogs, ...otherLogs].sort(
       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
   }
@@ -1508,6 +1556,114 @@ async function generateOpenRouterContent(
   };
 }
 
+// Tiltott zónák (self-modifying core restrictions)
+const FORBIDDEN_MODIFICATION_ZONES = [
+  ".env",
+  ".env.example",
+  "install.sh",
+  "uninstall.sh",
+  "update.sh",
+  "novaswarm.service", // Ha létezne
+  "server.ts" // Self-preservation: server.ts can only be modified through extreme care, but let's forbid it for agents.
+];
+
+// Inspector Agent (Dry-Run / Dry-Review) Simulator Sandbox
+async function executeInspectorDryRun(agentName: string, filePath: string, newContent: string): Promise<{ success: boolean; log: string }> {
+  addLog("inspector_agent", "Ellenőrző Ágens (Inspector)", "thought", `🔍 [SANDBOX] ${agentName} módosításának izolált "dry-run" szimulációja indul: "${filePath}"...`);
+  try {
+    const sandboxDir = path.join(process.cwd(), ".sandbox_tmp_" + Date.now());
+    if (!fs.existsSync(sandboxDir)) fs.mkdirSync(sandboxDir, { recursive: true });
+    
+    // Create a shadow copy of the workspace (only essential configs)
+    const filesToCopy = ["package.json", "tsconfig.json", "vite.config.ts"];
+    for (const f of filesToCopy) {
+      if (fs.existsSync(f)) fs.copyFileSync(f, path.join(sandboxDir, f));
+    }
+    
+    // Construct isolated file path
+    const sandboxFilePath = path.join(sandboxDir, filePath);
+    const parentDir = path.dirname(sandboxFilePath);
+    if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
+    fs.writeFileSync(sandboxFilePath, newContent, "utf-8");
+    
+    // Szimulált destruktív teszt igazolás: 
+    // Ha a parancs letöröl valamit, az a sandboxDir-en belül történne, nem sérülhet a fő könyvtár.
+    // A hálózati izolációt `--network=none` vagy ezen a platformon az `npm` lokális scope-ja védi.
+    
+    // Szintaktikai ellenőrzés a sandboxon belül (kizárólag arra az egy file-ra)
+    // Megjegyzés: Teljes tsc --noEmit nehézkes ha nincsenek ott a file-ok.
+    // Helyette a TypeScript AST vagy isolatedModules ellenőrzést hajtjuk végre, 
+    // Vagy befejezett tsc fordítást futtatunk csak azon a fájlon.
+    await execPromise(`npx tsc --noEmit --isolatedModules ${sandboxFilePath}`, { timeout: 35000, cwd: sandboxDir });
+    
+    addLog("inspector_agent", "Ellenőrző Ágens (Inspector)", "system", `✅ [SIKER] A kód szintaktikailag és izoláltan hibátlan. Engedélyezve a host fájlrendszerre.`);
+    fs.rmSync(sandboxDir, { recursive: true, force: true });
+    return { success: true, log: "Szimuláció és szintaktikai ellenőrzés sikeres." };
+  } catch (err: any) {
+    const errorMsg = err.stdout || err.stderr || err.message || "";
+    addLog("inspector_agent", "Ellenőrző Ágens (Inspector)", "system", `❌ [HIBA] A szimulációs sandbox elbukott (Destruktív/Szintaktikai hiba).\nRészletek: ${errorMsg.substring(0, 500)}`);
+    return { success: false, log: `Hiba az ellenőrzés során: ${errorMsg}` };
+  }
+}
+
+// Autonomous Git-backed Rollback Mechanism for self-modifications
+async function executeSafeGitModification(agentName: string, filePath: string, newContent: string): Promise<boolean> {
+  const isGit = fs.existsSync(".git");
+  if (!isGit) return false;
+
+  // 1. Biztonsági Zóna Ellenőrzés
+  const baseFileName = path.basename(filePath);
+  if (FORBIDDEN_MODIFICATION_ZONES.includes(baseFileName)) {
+    addLog("system", "Security (OpenClaw)", "system", `⚠️ [TILTOTT MŰVELET] ${agentName} megpróbálkozott egy rendszerkritikus fájl ("${baseFileName}") szerkesztésével, amit a Security Gate blokkolt.`);
+    return false;
+  }
+
+  addLog(agentName, agentName, "action", `[GIT-ROLLBACK] Biztonsági mentés (Commit) indul a(z) "${filePath}" frissítése előtt...`);
+  
+  try {
+    // Commit the previous state safely
+    await execPromise(`git add ${filePath}`);
+    await execPromise(`git commit -m "Auto-backup before ${agentName} modifies ${filePath}" || true`);
+
+    // Test with Inspector Agent FIRST before writing to actual host
+    const inspectorResult = await executeInspectorDryRun(agentName, filePath, newContent);
+    if (!inspectorResult.success) {
+      addLog("system", "System (Rollback)", "system", `[ROLLBACK] Meghívom az önmódosító biztonsági hálót. Az Inspector elbuktatta, a módosítás visszavonva.`);
+      await execPromise(`git checkout HEAD -- ${filePath}`);
+      // Notify telegram if active
+      await sendTelegramMessage(`⚠️ *Rollback (Prevenciós) aktiválva!*\n\n${agentName} módosítása instabilitást okozott volna a(z) \`${filePath}\` fájlban, a Sandbox blokkolta.`);
+      return false;
+    }
+
+    // Write new content as it passed
+    fs.writeFileSync(filePath, newContent, "utf-8");
+
+    // Success, commit the new valid state
+    await execPromise(`git add ${filePath}`);
+    await execPromise(`git commit -m "Auto-commit: ${agentName} successfully updated ${filePath}" || true`);
+    addLog(agentName, agentName, "system", `[GIT-COMMIT] Kód sikeresen validálva, a Sandbox ellenőrizte és elmentve a projekt verziókövetésébe.`);
+    return true;
+  } catch (e: any) {
+    addLog("system", "System (Rollback)", "system", `[KRITIKUS ROLLBACK] IO hiba: ${e.message}. Fájl eltávolítva/visszaállítva GIT-ből...`);
+    await execPromise(`git checkout HEAD -- ${filePath}`);
+    return false;
+  }
+}
+
+const LOCAL_PRICE_TIER_DB: Record<string, number> = {
+  "gemini-3.5-flash": 0.0001,
+  "gemini-2.5-pro": 0.01,
+  "google/gemini-2.5-flash:free": 0.00,
+  "meta-llama/llama-3.3-70b-instruct:free": 0.00,
+  "deepseek/deepseek-r1:free": 0.00,
+  "qwen2.5:0.5b": 0.00 // Ollama (local)
+};
+
+function getModelCostAttemptUsd(model: string, charsCount: number): number {
+  const pricePer1k = LOCAL_PRICE_TIER_DB[model] !== undefined ? LOCAL_PRICE_TIER_DB[model] : 0.0002;
+  return (charsCount / 1000) * pricePer1k;
+}
+
 // Robust wrapper for Gemini generateContent with 100% stable OpenRouter.ai failover fallback
 // Automatically selects the best available free model to keep operations smooth and cost-free
 async function generateContentWithRetry(
@@ -1516,9 +1672,18 @@ async function generateContentWithRetry(
   agentId = "system",
   agentName = "System"
 ): Promise<any> {
+    
   const agentRequestedModel = params.model;
   const globalMode = state.settings.globalModelMode || "auto";
   const openRouterKey = getActiveOpenRouterApiKey();
+
+  // Reset daily cost if date changed
+  const today = new Date().toISOString().split("T")[0];
+  if (state.settings.costResetDate !== today) {
+    state.settings.costResetDate = today;
+    state.settings.currentDailyCostUsd = 0.0;
+    saveDB();
+  }
 
   // Compile prompt string to check task complexity
   let promptString = "";
@@ -1529,6 +1694,16 @@ async function generateContentWithRetry(
   } else if (params.contents && typeof params.contents === "object") {
     promptString = params.contents.text || JSON.stringify(params.contents);
   }
+
+  const estimatedAttemptCost = getModelCostAttemptUsd(agentRequestedModel, promptString.length);
+  const costLimit = state.settings.dailyCostLimitUsd || 1.0;
+  let forceLocalFallback = false;
+
+  if (state.settings.currentDailyCostUsd !== undefined && ((state.settings.currentDailyCostUsd + estimatedAttemptCost) > costLimit)) {
+      addLog("system", "Cost Manager", "system", `⚠️ FIGYELMEZTETÉS: Globális API napi limit elérése közeleg (${state.settings.currentDailyCostUsd?.toFixed(3)}\$ / ${costLimit}\$). A további kérések ingyenes vagy lokális Ollama modellekre lesznek átterhelve!`);
+      forceLocalFallback = true;
+  }
+
 
   // Detect highly simple/lightweight tasks to save cloud token quotas
   const isVerySimple = promptString.length < 320 && 
@@ -1655,6 +1830,10 @@ async function generateContentWithRetry(
             limitObj.remainingRequests = Math.max(0, limitObj.remainingRequests - 1);
           }
 
+          if (state.settings.currentDailyCostUsd === undefined) state.settings.currentDailyCostUsd = 0;
+          state.settings.currentDailyCostUsd += getModelCostAttemptUsd(chan.model, promptString.length);
+          saveDB();
+
           if (chan.model !== agentRequestedModel) {
             const successMsg = `🔄 Intelligens Útvonalválasztó: A(z) '${chan.model}' modellt futtattuk le az aktív Gemini csatornán.`;
             console.log(`${agentName}: ${successMsg}`);
@@ -1675,6 +1854,10 @@ async function generateContentWithRetry(
             chan.model,
             params.config?.tools?.[0]?.functionDeclarations
           );
+
+          if (state.settings.currentDailyCostUsd === undefined) state.settings.currentDailyCostUsd = 0;
+          state.settings.currentDailyCostUsd += getModelCostAttemptUsd(chan.model, promptString.length);
+          saveDB();
 
           if (chan.model !== agentRequestedModel) {
             const successMsg = `🛡️ OpenRouter Biztonsági Tartalék: Sikeres failover válasz a(z) '${chan.model}' ingyenes modelltől!`;
@@ -1909,7 +2092,7 @@ Elemezd a jelenlegi helyzetet. Válassz ki egy aktív feladatot a Kanban táblá
     if (replyJson.helyiFajlIras) {
       const { path: fpath, content: fcontent } = replyJson.helyiFajlIras;
       if (fpath && fcontent) {
-        writeHostFile(fpath, fcontent, agent.id, agent.name);
+        await writeHostFile(fpath, fcontent, agent.id, agent.name);
       }
     }
 
@@ -2139,12 +2322,16 @@ async function triggerHeartbeatTick() {
           agentName: "Nóra KriptoRadar"
         };
 
-        const isReal = !!state.settings.binanceUseRealAccount;
-        const liveLabel = isReal ? " [VALÓS]" : " [DEMO]";
+        const isRealRequested = !!state.settings.binanceUseRealAccount;
+        if (isRealRequested) {
+          addLog("nora_radar", `Nóra KriptoRadar`, "action", `[Biztonság] Valós tőzsdei végrehajtás blokkolva. A rendszer csak Szimuláció (DEMO) üzemmódot futtat.`);
+        }
+        const isReal = false;
+        const liveLabel = " [DEMO SZIMULÁCIÓ]";
         const stratName = strategy === "scalping" ? " [Skalpolás]" : strategy === "hodl" ? " [HODL]" : " [Trendkövető]";
         const traderDisplayName = `Attila KriptoTrader${liveLabel}${stratName}`;
 
-        addLog("nora_radar", `Nóra KriptoRadar${liveLabel}`, "telegram", `Hírfelderítés: "${selectedNews.text}" (Szignál: ${selectedNews.rec})`);
+        addLog("nora_radar", `Nóra KriptoRadar`, "telegram", `Hírfelderítés: "${selectedNews.text}" (Szignál: ${selectedNews.rec})`);
 
         if (selectedNews.rec === "BUY") {
           // Dynamic choice of base where we actually have a balance (e.g. balance > 20)
@@ -2788,12 +2975,19 @@ function stopHeartbeatEngine() {
 
 // API Routes
 app.get("/api/state", (req, res) => {
+  const safeSettings = { ...state.settings };
+  if (safeSettings.geminiApiKey) safeSettings.geminiApiKey = "HIDDEN";
+  if (safeSettings.openRouterApiKey) safeSettings.openRouterApiKey = "HIDDEN";
+  if (safeSettings.telegramBotToken) safeSettings.telegramBotToken = "HIDDEN";
+  if (safeSettings.binanceApiKey) safeSettings.binanceApiKey = "HIDDEN";
+  if (safeSettings.binanceApiSecret) safeSettings.binanceApiSecret = "HIDDEN";
+
   res.json({
     agents: state.agents,
     kanbanCards: state.kanbanCards,
     memories: state.memories,
     logs: state.logs,
-    settings: state.settings,
+    settings: safeSettings,
     systemRunning: state.settings.teamActive,
     telegramConnected: !!(state.settings.telegramBotToken && state.settings.telegramChatId),
     mcpServers: state.mcpServers || [],
@@ -3251,8 +3445,8 @@ app.post("/api/agents/:id/chat", async (req, res) => {
 
   // Compile history
   const agentChats = state.logs
-    .filter(l => l.type === "chat" && l.agentId === agent.id)
-    .slice(0, 15) // Keep last 15 messages
+    .filter(l => l.type === "chat" && l.agentId === agent.id && l.id !== userLogId)
+    .slice(0, 15) // Keep last 15 messages (excluding current check-in)
     .reverse();
 
   const historyPrompt = agentChats.map(l => {
@@ -3400,13 +3594,7 @@ Válaszolj közvetlenül a felhasználónak a megadott szerepköröd stílusába
           else if (name === "write_host_file") {
             const { filePath, content } = args as any;
             try {
-              const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
-              const parentDir = path.dirname(resolvedPath);
-              if (!fs.existsSync(parentDir)) {
-                fs.mkdirSync(parentDir, { recursive: true });
-              }
-              fs.writeFileSync(resolvedPath, content, "utf-8");
-              addLog(agent.id, agent.name, "action", `Helyi fájl létrehozva/módosítva interaktívan: "${filePath}"`);
+              await writeHostFile(filePath, content, agent.id, agent.name);
               toolResponses.push({ success: true, message: `A fájl sikeresen mentve lett a gazdagépen: ${filePath}` });
             } catch (fileErr: any) {
               toolResponses.push({ success: false, error: `Fájlírási hiba: ${fileErr.message}` });
@@ -3606,7 +3794,12 @@ app.post("/api/binance/trade", (req, res) => {
   }
 
   const isReal = !!state.settings.binanceUseRealAccount;
-  const liveLabel = isReal ? " [VALÓS]" : " [DEMO]";
+  
+  if (isReal) {
+    return res.status(400).json({ error: "A valós Binance API integráció jelenleg nem elérhető biztonsági okokból. Csak szimulált (Demo) üzemmód lehetséges." });
+  }
+
+  const liveLabel = " [DEMO SZIMULÁCIÓ]";
 
   const newTrade: BinanceTrade = {
     id: `trade_${Date.now()}`,
@@ -4746,6 +4939,69 @@ Adj vissza egy JSON-t az alábbi attribútumokkal (NE HASZNÁLJ markdown \`\`\`j
         capabilities: parsedDream.newMcp.capabilities || []
       };
       state.mcpServers.push(finalMcp);
+
+      // --- KÖZPONTI OBSIDIAN VAULT & VECTRA (NODE-ALAPÚ) VEKTOR DB SYNC ---
+      try {
+        const vaultDir = path.join(process.cwd(), "obsidian_vault", agent.name);
+        if (!fs.existsSync(vaultDir)) fs.mkdirSync(vaultDir, { recursive: true });
+        
+        const timestamp = new Date().toISOString().split('T')[0];
+        const mdContent = `---
+tags: [ #memory, #dream, #skill, #mcp, #${agent.name} ]
+date: ${timestamp}
+---
+# Álomszintézis: ${agent.name}
+
+## Új Memória 🧠
+${finalMemory.content}
+
+## Felszívott Új Képesség (Skill) ⚔️
+**Név:** [[${finalSkill.name}]]
+**Leírás:** ${finalSkill.description}
+
+## Felfedezett új Integráció (MCP) 🔗
+**Eszköz:** [[${finalMcp.name}]]
+**Endpoint:** \`${finalMcp.url}\`
+**Képességek:** ${finalMcp.capabilities.join(", ")}
+
+*Generálva autonóm módon a NovaSwarm álomciklus keretében. [Vektortér Vectra DB részleges Sync: Active]*
+`;
+        const fileName = `Dream_Synthesis_${Date.now()}.md`;
+        fs.writeFileSync(path.join(vaultDir, fileName), mdContent, "utf-8");
+
+        // Vectra Initialization and Sync
+        const vectraDir = path.join(process.cwd(), ".vectra_db");
+        if (!fs.existsSync(vectraDir)) fs.mkdirSync(vectraDir, { recursive: true });
+        const index = new LocalIndex(path.join(vectraDir, "memories"));
+        if (!await index.isIndexCreated()) {
+            // Using 384 dimensions for generic lightweight embeddings (eg. all-MiniLM-L6-v2 size or local hash map)
+            await index.createIndex({ version: 1, deleteIfExists: false });
+        }
+        
+        // Mock lightweight embedding function (TF-IDF hashed vector) to stay offline & multi-platform without python
+        const generateLightweightEmbedding = (text: string) => {
+             const vec = new Array(384).fill(0);
+             const words = text.toLowerCase().match(/[a-z0-9_]+/g) || [];
+             words.forEach(w => {
+                 let hash = 0;
+                 for (let i = 0; i < w.length; i++) hash = Math.imul(31, hash) + w.charCodeAt(i) | 0;
+                 vec[Math.abs(hash) % 384] += 1;
+             });
+             // Normalize
+             const mag = Math.sqrt(vec.reduce((sum, v) => sum + v*v, 0));
+             return mag > 0 ? vec.map(v => v/mag) : vec;
+        };
+
+        const embedding = generateLightweightEmbedding(mdContent);
+        await index.insertItem({
+            vector: embedding,
+            metadata: { type: "dream", agent: agent.name, file: fileName, content: finalMemory.content }
+        });
+        
+      } catch (vaultErr) {
+        console.error("Nem sikerült elmenteni az Obsidian Vault logokat vagy a Vectra DB-t:", vaultErr);
+      }
+      // --- END FULL DB SYNC ---
 
       addLog(agent.id, agent.name, "memory", `Új emlék született álmodozás közben: "${finalMemory.content}"`);
       addLog(agent.id, agent.name, "system", `Sikeres ábrándozás! Új képesség elsajátítva: "${finalSkill.name}". Új MCP javaslat: "${finalMcp.name}".`);

@@ -24,6 +24,12 @@ export function Logs({ logs, onClearLogs, onRefresh }: LogsProps) {
           color: "bg-purple-950/60 text-purple-300 border border-purple-800/80",
           icon: <BrainCircuit className="w-3.5 h-3.5" />
         };
+      case "chat":
+        return {
+          text: "Csevegés",
+          color: "bg-emerald-950/60 text-emerald-300 border border-emerald-800/80",
+          icon: <MessageSquare className="w-3.5 h-3.5" />
+        };
       case "action":
         return {
           text: "Művelet",
@@ -66,6 +72,7 @@ export function Logs({ logs, onClearLogs, onRefresh }: LogsProps) {
           {[
             { id: "all", label: "Mind" },
             { id: "thought", label: "🧠 Gondolatok" },
+            { id: "chat", label: "💬 Csevegés" },
             { id: "action", label: "⚡ Műveletek" },
             { id: "telegram", label: "📢 Telegram" },
             { id: "memory", label: "💾 Memória" },
