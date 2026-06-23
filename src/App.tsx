@@ -17,6 +17,7 @@ import { DeepResearch } from "./components/DeepResearch";
 import SystemManager from "./components/SystemManager";
 import { SetupWizard } from "./components/SetupWizard";
 import { WorkspaceHub } from "./components/WorkspaceHub";
+import { TerminalTab } from "./components/TerminalTab";
 import { 
   Sparkles, 
   BrainCircuit, 
@@ -281,6 +282,8 @@ export default function App() {
             onRefresh={() => fetchState(false)}
           />
         );
+      case "terminal":
+        return <TerminalTab />;
       case "mcp-skills":
         return (
           <McpSkillsHub
@@ -440,6 +443,7 @@ export default function App() {
             { id: "dream", label: lang === "hu" ? "Álmodozás ✨" : "Dreaming ✨", icon: <Sparkles className="w-4 h-4 text-purple-400" /> },
             { id: "deep-research", label: getTranslation(lang, "research") + " 🔍", icon: <Search className="w-4 h-4 text-cyan-400" /> },
             { id: "logs", label: getTranslation(lang, "logs"), icon: <Terminal className="w-4 h-4" /> },
+            { id: "terminal", label: lang === "hu" ? "Terminál 💻" : "Terminal 💻", icon: <Terminal className="w-4 h-4 text-emerald-400" /> },
             { id: "system-mgmt", label: lang === "hu" ? "Mentés & Rendszer 🛡️" : "Backup & System 🛡️", icon: <Database className="w-4 h-4 text-rose-500" /> },
             { id: "docs_ota", label: lang === "hu" ? "Tudástár & OTA 📡" : "Knowledge Base & OTA 📡", icon: <BookOpen className="w-4 h-4 text-indigo-400" />, indicator: state?.otaUpdateAvailable },
             { id: "workspace-hub", label: lang === "hu" ? "Workspace 🌐" : "Workspace 🌐", icon: <HardDrive className="w-4 h-4 text-blue-400" /> },

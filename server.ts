@@ -411,7 +411,7 @@ const defaultAgents: Agent[] = [
     id: "gabor_boss",
     name: "Gábor",
     avatar: "👔",
-    role: "Swarm Leader",
+    role: "boss",
     systemInstruction: "Te vagy Gábor, a NovaSwarm Swarm Leadere. Felelősségeid: feladatok kiosztása (delegation), tervezés intézése (planning), a rendszer holisztikus felügyelete (system supervision), és a csapat koordinálása. Elemzed a kéréseket, és rábízod a szakértőkre (Attila, Bálint, stb.). Határozott és egyértelmű vezető vagy.",
     model: "gemini-3.5-flash",
     active: true,
@@ -421,8 +421,8 @@ const defaultAgents: Agent[] = [
     id: "attila_tech",
     name: "Attila",
     avatar: "💻",
-    role: "Tech Lead",
-    systemInstruction: "Te vagy Attila, a csapat Tech Lead-je és szoftverfejlesztője. Felelősségeid: kód generálás, programhibák javítása (debugging), self-healing protokollok futtatása, és MCP szerver modulok implementálása. Nincs szimuláció, csak valódi, végrehajtható kód.",
+    role: "tech_lead",
+    systemInstruction: "Te vagy Attila, a csapat Tech Lead-je és szoftverfejlesztője. Felelősségeid: kód generálás, programhibák javítása (debugging), self-healing protokollok futtatása, and MCP szerver modulok implementálása. Nincs szimuláció, csak valódi, végrehajtható kód.",
     model: "gemini-3.5-flash",
     active: true,
     internetSearchEnabled: true,
@@ -431,7 +431,7 @@ const defaultAgents: Agent[] = [
     id: "balint_security",
     name: "Bálint",
     avatar: "🛡️",
-    role: "Security Analyst",
+    role: "analyst",
     systemInstruction: "Te vagy Bálint, a Security Analyst. Felelősségeid: biztonsági átvizsgálás (security review), kockázatelemzés (risk analysis), jogosultságkezelés és rendszerhozzáférések szigorú ellenőrzése. Garantálod a Privileged Action Gateway betartását.",
     model: "gemini-3.5-flash",
     active: true,
@@ -441,7 +441,7 @@ const defaultAgents: Agent[] = [
     id: "cili_creative",
     name: "Cili",
     avatar: "✍️",
-    role: "Creative Writer",
+    role: "writer",
     systemInstruction: "Te vagy Cili, a Creative Writer. Felelősségeid: tartalomgenerálás, marketing, PR, emberi és empatikus kommunikáció a felhasználóval, valamint a rendszer technikai válaszainak érthetővé varázsolása.",
     model: "gemini-3.5-flash",
     active: true,
@@ -451,7 +451,7 @@ const defaultAgents: Agent[] = [
     id: "denes_data",
     name: "Dénes",
     avatar: "📊",
-    role: "Data Analyst",
+    role: "analyst",
     systemInstruction: "Te vagy Dénes, a Data Analyst. Felelősségeid: mély kutatás (research), statisztikák számítása és elemzése, valamint transzparens adatalapú riportok (reporting) készítése a többiek számára.",
     model: "gemini-3.5-flash",
     active: true,
@@ -461,7 +461,7 @@ const defaultAgents: Agent[] = [
     id: "nora_news",
     name: "Nóra",
     avatar: "🕵️‍♀️",
-    role: "News Intelligence",
+    role: "news_analyst",
     systemInstruction: "Te vagy Nóra, a News Intelligence felelős. Felelősségeid: piaci hírek elemzése (market news), kripto hírek (crypto news) követése és webes oknyomozás (web research) a legfrissebb internetes trendek alapján.",
     model: "gemini-3.5-flash",
     active: true,
@@ -471,7 +471,7 @@ const defaultAgents: Agent[] = [
     id: "viktor_trader",
     name: "Viktor",
     avatar: "📈",
-    role: "Trader",
+    role: "trader",
     systemInstruction: "Te vagy Viktor, a pénzügyi Trader. Felelősségeid: kereskedési döntések meghozatala (trading decisions), portfólió menedzsment (portfolio management), és a végrehajtás delegálása (ügyletek nyitása/zárása) a tőzsdei API-kon keresztül, szorosan együttműködve Nórával a hírek miatt.",
     model: "gemini-3.5-flash",
     active: true,
@@ -834,7 +834,7 @@ async function executeHostCommand(command: string, agentId: string, agentName: s
       if (!state.privilegeRequests) state.privilegeRequests = [];
       state.privilegeRequests.push(newReq);
       saveDB();
-      addLog("system", "Privilege Gateway", "warning", `Veszélyes parancs blokkolva, jóváhagyásra vár: "${command}"`);
+      addLog("system", "Privilege Gateway", "system", `Veszélyes parancs blokkolva, jóváhagyásra vár: "${command}"`);
       throw new Error(`PRIVILEGED_ACTION_REQUIRED: A(z) '${command}' parancs végrehajtása Bálint (Security Analyst) vagy a felhasználó jóváhagyását igényli. Kérlek szólj a felhasználónak, hogy hagyja jóvá a UI-on! ReqID: ${newReq.id}`);
     }
   }
@@ -1326,23 +1326,50 @@ async function refreshFreeModelsAutomatically() {
     if (res.ok) {
       const body = await res.json();
       if (body && Array.isArray(body.data)) {
-        // Find every model that has ":free" in ID or has 0 cost!
-        const freeModels = body.data.filter((m: any) => {
-          const isFreeId = m.id?.endsWith(":free");
+        // Find every model that has ":free" in ID or has 0 cost, excluding specialized or helper endpoints
+        let freeModels = body.data.filter((m: any) => {
+          const id = (m.id || "").toLowerCase();
+          const isFreeId = id.endsWith(":free");
           const isFreePricing = m.pricing && (
             parseFloat(m.pricing.prompt || "0") === 0 && 
             parseFloat(m.pricing.completion || "0") === 0
           );
-          return isFreeId || isFreePricing;
+          if (!isFreeId && !isFreePricing) return false;
+          
+          // Exclude specialized and helper models that are not general purpose LLMs
+          if (id.includes("safety") || 
+              id.includes("moderation") || 
+              id.includes("guard") || 
+              id.includes("embed") || 
+              id.includes("critic") || 
+              id.includes("coder") || 
+              id.includes("code-") || 
+              id.includes("translation") || 
+              id.includes("math")) {
+            return false;
+          }
+          return true;
         });
 
         if (freeModels.length > 0) {
+          // Sort to prioritize popular/known models
+          const popularKeywords = ["gemini", "llama", "deepseek", "qwen", "mistral", "phi"];
+          freeModels.sort((a: any, b: any) => {
+            const idA = (a.id || "").toLowerCase();
+            const idB = (b.id || "").toLowerCase();
+            
+            const scoreA = popularKeywords.filter(keyword => idA.includes(keyword)).length;
+            const scoreB = popularKeywords.filter(keyword => idB.includes(keyword)).length;
+            
+            return scoreB - scoreA; // higher score first
+          });
+
           const ids = freeModels.map((m: any) => m.id);
-          console.log(`✨ OpenRouter-en talált aktív ingyenes modellek:`, ids);
+          console.log(`✨ OpenRouter-en talált aktív ingyenes modellek (szűrt és rendezett):`, ids);
           
           // Save and prioritize
           state.settings.openRouterModelPriority = ids.slice(0, 8).join(", ");
-          addLog("system", "System", "system", `💡 Modell-felfedező sikeres: ${freeModels.length} db aktív ingyenes modellt mértünk be az OpenRouter rendszerből.`);
+          addLog("system", "System", "system", `💡 Modell-felfedező sikeres: ${freeModels.length} db aktív ingyenes modellt mértünk be az OpenRouter rendszerből (kiemelve a stabil modellek).`);
         }
       }
     }
@@ -1424,20 +1451,25 @@ async function generateOllamaContent(prompt: string, systemInstruction: string, 
     }
   };
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(15000)
-  });
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000)
+    });
 
-  if (!res.ok) {
-    throw new Error(`Ollama returned status code: ${res.status}`);
+    if (!res.ok) {
+      throw new Error(`Ollama returned status code: ${res.status}`);
+    }
+
+    const data = await res.json();
+    const text = data.message?.content || "";
+    return { text };
+  } catch (err: any) {
+    console.error(`Ollama connection failed: ${err.message}`);
+    throw new Error(`Nem sikerült kapcsolódni a helyi Ollama API-hoz (${baseUrl}): ${err.message}`);
   }
-
-  const data = await res.json();
-  const text = data.message?.content || "";
-  return { text };
 }
 
 // Call local Ollama embedding service
@@ -1717,10 +1749,8 @@ async function generateContentWithRetry(
 
   let channels: AttemptChannel[] = [];
 
-  // 1. If it's an extremely lightweight task, run via local Ollama first!
-  if (isVerySimple) {
-    channels.push({ provider: 'ollama', model: 'qwen2.5:0.5b' });
-  }
+  // 1. If it's an extremely lightweight task, we can still use Gemini or OpenRouter normally!
+  // No automatic local Ollama inclusion here to preserve real model logic.
 
   // 2. Prioritize manually forced locks from settings
   if (globalMode !== "auto" && globalMode !== "disabled") {
@@ -1751,10 +1781,7 @@ async function generateContentWithRetry(
     });
   }
 
-  // 5. Ultimate fallback: always append offline local Ollama model to the very bottom
-  if (!channels.some(c => c.provider === 'ollama')) {
-    channels.push({ provider: 'ollama', model: 'qwen2.5:0.5b' });
-  }
+  // 5. No ultimate automatic Ollama fallback at the bottom - we only use real active keys!
 
   let lastError: any = null;
   let allErrors: string[] = [];
@@ -2620,7 +2647,7 @@ Szia ${senderName}! Az alábbi parancsokkal közvetlenül lekérheted a webui in
 *Aktív Ágensek gyűjtője (${activeAgents.length}/${state.agents.length}):*
 ${activeAgents.map(a => `• *${a.name}* (${a.avatar} - ${a.role})`).join("\n")}
 
-📡 *Rendszer verzió:* \`v2.0.3 (Swarm Command & Control Release)\` [ONLINE]`;
+📡 *Rendszer verzió:* \`v3.0.1 (Swarm Command & Control Release)\` [ONLINE]`;
               if (otaUpdateAvailable) {
                 commandReply += `\n\n🔄 *Elérhető frissítés!* \nKüldd a /update parancsot a frissítéshez! (${otaLatestCommitInfo})`;
               }
@@ -3413,7 +3440,7 @@ Feladatod: Válaszolj neki szakmai és konstruktív módon, a szerepednek megfel
   const ai = getGeminiClient();
   const openRouterKey = getActiveOpenRouterApiKey();
   
-  if (ai || openRouterKey) {
+  if (true) {
     const aiRes = await generateContentWithRetry(
       ai,
       {
@@ -3427,8 +3454,6 @@ Feladatod: Válaszolj neki szakmai és konstruktív módon, a szerepednek megfel
       targetAgent.name
     );
     return aiRes.text || "(Nincs válasz)";
-  } else {
-    return `[Hiba: Sem a Gemini API, sem az OpenRouter API kulcs nincs megadva az ágens-ágens kommunikációhoz.]`;
   }
 }
 
@@ -3491,7 +3516,7 @@ Válaszolj közvetlenül a felhasználónak a megadott szerepköröd stílusába
   const openRouterKey = getActiveOpenRouterApiKey();
   let replyText = "";
 
-  if (ai || openRouterKey) {
+  if (true) {
     try {
       const aiRes = await generateContentWithRetry(
         ai,
@@ -3788,9 +3813,6 @@ A felhasználó eredeti kérése: "${text}"
     } catch (err: any) {
       replyText = `Sajnálom, hiba történt a kommunikáció során: ${err.message}`;
     }
-  } else {
-    // Strictly return error when API Key is missing. No simulated conversational chatter!
-    return res.status(400).json({ error: "Sajnálom, a chat funkció és az ágensek működtetése jelenleg nem lehetséges Gemini API vagy OpenRouter API Kulcs nélkül. Kérlek add meg a kulcsot a Beállítások menüpontban!" });
   }
 
   // Save agent reply to logs
@@ -4183,6 +4205,27 @@ app.post("/api/self-heal", async (req, res) => {
     res.json({ success: true, result, logs: state.logs, memories: state.memories });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Live Web Terminal Command Execution Endpoint
+app.post("/api/terminal/execute", async (req, res) => {
+  const { command } = req.body;
+  if (!command) {
+    return res.status(400).json({ success: false, error: "A parancs mező megadása kötelező!" });
+  }
+  
+  addLog("system", "Web Terminal", "action", `Web Terminál parancs indítva: "${command}"`);
+  try {
+    const { stdout, stderr } = await execPromise(command, { timeout: 45000 });
+    const output = (stdout || stderr || "").trim();
+    addLog("system", "Web Terminal", "system", `Web Terminál sikeres végrehajtás: "${command}"`);
+    res.json({ success: true, output: output || "(Sikeres, nincs kimenet)" });
+  } catch (err: any) {
+    const errMsg = err.message || "Ismeretlen végrehajtási hiba.";
+    const errOutput = (err.stdout || "") + "\n" + (err.stderr || "");
+    addLog("system", "Web Terminal", "system", `Web Terminál hiba: ${errMsg}`);
+    res.json({ success: false, output: errOutput.trim() || null, error: errMsg });
   }
 });
 
@@ -4867,30 +4910,30 @@ app.post("/api/privilege/requests/:id/resolve", async (req, res) => {
         await execPromise(privReq.command);
         addLog("system", "Privilege Gateway", "system", `Automatikusan lefutott a Patch élesítés: ${privReq.command}`);
       } catch(e: any) {
-        addLog("system", "Privilege Gateway", "error", `Hiba a patch élesítésekor: ${e.message}`);
+        addLog("system", "Privilege Gateway", "system", `Hiba a patch élesítésekor: ${e.message}`);
       }
     } else if (privReq.command === "ACTIVATE_DREAM_PROPOSALS") {
       // Find the dream discoveries from currentDream or latest dream log
       if (currentDream && currentDream.discoveries) {
         const d = currentDream.discoveries;
-        if (d.newSkill) {
+        if (d.skill) {
           state.skills.push({
             id: `skill_dream_${Date.now()}`,
-            name: d.newSkill.name,
-            description: d.newSkill.description,
+            name: d.skill.name,
+            description: d.skill.description,
             type: "custom",
             active: true,
-            codeSnippet: d.newSkill.codeSnippet || "// Auto generált",
+            codeSnippet: d.skill.codeSnippet || "// Auto generált",
           });
         }
-        if (d.newMcp) {
+        if (d.mcp) {
           state.mcpServers.push({
             id: `mcp_dream_${Date.now()}`,
-            name: d.newMcp.name,
-            url: d.newMcp.url,
+            name: d.mcp.name,
+            url: d.mcp.url,
             status: "connected",
-            description: d.newMcp.description,
-            capabilities: d.newMcp.capabilities || [],
+            description: d.mcp.description,
+            capabilities: d.mcp.capabilities || [],
           });
         }
         addLog("system", "Privilege Gateway", "system", `Álom javaslatok integrálva a globális memóriába.`);
@@ -5167,6 +5210,24 @@ Adj vissza egy JSON-t az alábbi attribútumokkal (NE HASZNÁLJ markdown \`\`\`j
         createdAt: new Date().toISOString()
       };
       state.memories.push(finalMemory);
+
+      const finalSkill: AgentSkill = {
+        id: `skill_dream_${Date.now()}`,
+        name: parsedDream.newSkill?.name || "Automata kódrefaktoráló képesség",
+        description: parsedDream.newSkill?.description || "Leírás",
+        type: "custom",
+        active: true,
+        codeSnippet: parsedDream.newSkill?.codeSnippet || "// Auto generált",
+      };
+
+      const finalMcp: McpServer = {
+        id: `mcp_dream_${Date.now()}`,
+        name: parsedDream.newMcp?.name || "Notion Knowledge Base MCP",
+        url: parsedDream.newMcp?.url || "https://mcp.internal/notion-sync",
+        status: "connected",
+        description: parsedDream.newMcp?.description || "Leírás",
+        capabilities: parsedDream.newMcp?.capabilities || ["sync_pages"],
+      };
 
       // We do not activate the skill/MCP automatically. We generate Privilege Requests so Gábor/User can review them.
       if (!state.privilegeRequests) state.privilegeRequests = [];

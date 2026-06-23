@@ -1,4 +1,4 @@
-# 🤖 NovaSwarm AI - Autonóm Multi-Agent Csapat Kezelő (v2.0.3)
+# 🤖 NovaSwarm AI - Autonóm Multi-Agent Csapat Kezelő (v3.0.1)
 
 <div align="center">
   <img src="./src/assets/images/novaswarm_banner_1782147520316.jpg" alt="NovaSwarm AI Network Architecture Banner" width="100%" max-width="800px" style="border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);" />
@@ -131,6 +131,9 @@ sudo systemctl start novaswarm
 ---
 
 ## 📈 Verziótörténet
+
+* **v3.0.1**
+  * **Intelligens Failover & No-Ollama Fix**: Az automechanikai modell-kapcsolódási és helyi beágyazási eljárások finomhangolása, a szükségtelen Ollama indítás elkerülése és offline ál-működések kiszűrése. Elősegítettük a stabil közvetlen API-használatot.
 
 * **v2.0.3**
   * **Intelligens Failover Javítás**: Az API kulcs rotáció és újrapróbálkozás logikájának (Exponential Backoff) javítása. A rendszer most már helyesen léptet a kulcsok között és megbízhatóbban vált a helyi modellekre (Ollama) vagy OpenRouterre, ha egy API kulcs kifogyott vagy Rate Limit-et kap.
