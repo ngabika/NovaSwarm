@@ -786,10 +786,13 @@ function loadDB() {
         // If empty or filtered too much, restore a robust default set
         if (parts.length === 0) {
           parts = [
-            "google/gemini-2.5-flash:free",
+            "google/gemma-4-31b-it:free",
+            "google/gemma-4-26b-a4b-it:free",
+            "nousresearch/hermes-3-llama-3.1-405b:free",
+            "qwen/qwen3-next-80b-a3b-instruct:free",
             "meta-llama/llama-3.3-70b-instruct:free",
-            "deepseek/deepseek-r1:free",
-            "meta-llama/llama-3-8b-instruct:free"
+            "meta-llama/llama-3.2-3b-instruct:free",
+            "openrouter/free"
           ];
         }
         state.settings.openRouterModelPriority = parts.join(", ");
@@ -1291,8 +1294,7 @@ function isModelAcceptable(id: string | undefined): boolean {
       lp.includes("preview") ||
       lp.includes("lyria") ||
       lp.includes("poolside") ||
-      lp.includes("laguna") ||
-      lp.includes("gemma-4")) {
+      lp.includes("laguna")) {
     return false;
   }
   
@@ -1301,15 +1303,10 @@ function isModelAcceptable(id: string | undefined): boolean {
       lp.includes("owl-alpha") ||
       lp.includes("nemotron") ||
       lp.includes("cohere") ||
-      lp.includes("qwen3-next") ||
-      lp.includes("qwen/qwen3") ||
-      lp.includes("nousresearch/hermes-3-llama-3.1-405b") ||
-      lp.includes("hermes-3-llama") ||
       lp.includes("north-mini") ||
       lp.includes("gpt-oss") ||
       lp.includes("liquid") ||
-      lp.includes("lfm-") ||
-      lp === "openrouter/free") {
+      lp.includes("lfm-")) {
     return false;
   }
   
@@ -1444,13 +1441,23 @@ async function refreshFreeModelsAutomatically() {
 
         if (freeModels.length > 0) {
           // Sort to prioritize popular/known models
-          const popularKeywords = ["gemini", "llama", "deepseek", "qwen", "mistral", "phi"];
+          const stableKeywords = ["gemma-4-", "llama-3.3-", "llama-3.1-", "gemma-2-", "qwen-2.5-", "hermes-3-", "qwen3-next"];
+          const popularKeywords = ["llama", "qwen", "mistral", "phi"];
           freeModels.sort((a: any, b: any) => {
             const idA = (a.id || "").toLowerCase();
             const idB = (b.id || "").toLowerCase();
             
-            const scoreA = popularKeywords.filter(keyword => idA.includes(keyword)).length;
-            const scoreB = popularKeywords.filter(keyword => idB.includes(keyword)).length;
+            let scoreA = stableKeywords.filter(keyword => idA.includes(keyword)).length * 5;
+            scoreA += popularKeywords.filter(keyword => idA.includes(keyword)).length;
+            if (idA.includes("gemini-2.5") || idA.includes("deepseek-r1")) {
+              scoreA -= 20;
+            }
+            
+            let scoreB = stableKeywords.filter(keyword => idB.includes(keyword)).length * 5;
+            scoreB += popularKeywords.filter(keyword => idB.includes(keyword)).length;
+            if (idB.includes("gemini-2.5") || idB.includes("deepseek-r1")) {
+              scoreB -= 20;
+            }
             
             return scoreB - scoreA; // higher score first
           });
@@ -1824,13 +1831,32 @@ async function generateContentWithRetry(
   }
 
   let openRouterModels = [
-    "google/gemini-2.5-flash:free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "nousresearch/hermes-3-llama-3.1-405b:free",
+    "qwen/qwen3-next-80b-a3b-instruct:free",
     "meta-llama/llama-3.3-70b-instruct:free",
-    "deepseek/deepseek-r1:free",
-    "meta-llama/llama-3-8b-instruct:free"
+    "meta-llama/llama-3.2-3b-instruct:free",
+    "openrouter/free"
   ];
   if (state.settings.openRouterModelPriority) {
-    openRouterModels = state.settings.openRouterModelPriority.split(",").map(m => m.trim()).filter(Boolean);
+    const userModels = state.settings.openRouterModelPriority.split(",").map(m => m.trim()).filter(Boolean);
+    const combined = [...userModels];
+    const robustDefaults = [
+      "google/gemma-4-31b-it:free",
+      "google/gemma-4-26b-a4b-it:free",
+      "nousresearch/hermes-3-llama-3.1-405b:free",
+      "qwen/qwen3-next-80b-a3b-instruct:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "meta-llama/llama-3.2-3b-instruct:free",
+      "openrouter/free"
+    ];
+    robustDefaults.forEach(def => {
+      if (!combined.includes(def)) {
+        combined.push(def);
+      }
+    });
+    openRouterModels = combined;
   }
 
   interface AttemptChannel {
@@ -3172,10 +3198,13 @@ app.post("/api/settings", (req, res) => {
     parts = parts.filter((p: string) => isModelAcceptable(p));
     if (parts.length === 0) {
       parts = [
-        "google/gemini-2.5-flash:free",
+        "google/gemma-4-31b-it:free",
+        "google/gemma-4-26b-a4b-it:free",
+        "nousresearch/hermes-3-llama-3.1-405b:free",
+        "qwen/qwen3-next-80b-a3b-instruct:free",
         "meta-llama/llama-3.3-70b-instruct:free",
-        "deepseek/deepseek-r1:free",
-        "meta-llama/llama-3-8b-instruct:free"
+        "meta-llama/llama-3.2-3b-instruct:free",
+        "openrouter/free"
       ];
     }
     newSet.openRouterModelPriority = parts.join(", ");
