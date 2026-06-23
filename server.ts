@@ -4242,22 +4242,104 @@ app.post("/api/ota-update", async (req, res) => {
       fs.copyFileSync(DB_FILE, `${DB_FILE}.bak`);
     }
 
-    // 2. Git Fetch és Pull (GitHubról)
-    let gitLog = "Szimulált OTA frissítés (Offline/Nem git repo)";
+    // 2. Git Fetch és Pull (GitHubról) vagy ZIP Fallback
+    let gitLog = "";
     let isGit = false;
+    let updateSuccess = false;
     try {
       await execPromise("git rev-parse --is-inside-work-tree");
       isGit = true;
     } catch (e) {}
 
     if (isGit) {
-      addLog("attila_tech", "Attila", "system", "Git tároló észlelve. Legfrissebb verzió (v1.0+) letöltése...");
-      const { stdout: fetchOut } = await execPromise("git fetch --all");
-      const { stdout: pullOut } = await execPromise("git pull origin main || git pull origin master");
-      gitLog = `Fetch:\n${fetchOut}\nPull:\n${pullOut}`;
-      addLog("attila_tech", "Attila", "system", "Lehúzott GitHub változások:\n" + pullOut.substring(0, 300));
-    } else {
-      addLog("attila_tech", "Attila", "system", "Lokális/Szimulált OTA teszt hurok futtatása. Forráskód-integritás ellenőrzése...");
+      try {
+        addLog("attila_tech", "Attila", "system", "Git tároló észlelve. Kapcsolódás az eredeti NovaSwarm GitHub upstream tárolóhoz...");
+        
+        // Eredeti tároló hozzáadása ha még nincs beállítva
+        try {
+          await execPromise("git remote add upstream-novaswarm https://github.com/ngabika/NovaSwarm.git || git remote set-url upstream-novaswarm https://github.com/ngabika/NovaSwarm.git");
+        } catch (remoteErr) {}
+
+        // Lokális módosítások biztonsági mentése (git stash)
+        let stashed = false;
+        try {
+          const statusClean = (await execPromise("git status --porcelain")).stdout.trim();
+          if (statusClean !== "") {
+            addLog("attila_tech", "Attila", "system", "Lokális egyedi módosítások detektálva. Átmeneti mentés stashinggel...");
+            await execPromise("git stash");
+            stashed = true;
+          }
+        } catch (stashErr: any) {
+          addLog("attila_tech", "Attila", "system", `⚠️ Git stash figyelmeztetés: ${stashErr.message}`);
+        }
+
+        // Fetch
+        addLog("attila_tech", "Attila", "system", "Legfrissebb verzió lekérése a GitHub-ról...");
+        let fetchOut = "";
+        try {
+          const resFetch = await execPromise("git fetch upstream-novaswarm", { timeout: 30000 });
+          fetchOut = resFetch.stdout || "Fetch completed.";
+        } catch (fetchErr: any) {
+          addLog("attila_tech", "Attila", "system", `⚠️ Eredeti remote elérés sikertelen. Standard fetch próbálkozás...`);
+          const resFetchAll = await execPromise("git fetch --all || true", { timeout: 30000 });
+          fetchOut = resFetchAll.stdout || "All-Fetch completed.";
+        }
+
+        // Pull vagy kényszerített integrálás
+        let pullOut = "";
+        try {
+          const resPull = await execPromise("git pull upstream-novaswarm main || git pull upstream-novaswarm master || git pull --all", { timeout: 35000 });
+          pullOut = resPull.stdout || "Pull completed.";
+        } catch (pullErr: any) {
+          addLog("attila_tech", "Attila", "system", `⚠️ Standard git pull sikertelen. Kényszerített integráció futtatása (git merge/reset)...`);
+          const resReset = await execPromise("git merge upstream-novaswarm/main || git merge upstream-novaswarm/master || git reset --hard upstream-novaswarm/main || git reset --hard upstream-novaswarm/master", { timeout: 35000 });
+          pullOut = resReset.stdout || "Force reset completed.";
+        }
+
+        gitLog = `Fetch:\n${fetchOut}\nPull:\n${pullOut}`;
+        addLog("attila_tech", "Attila", "system", "Lehúzott GitHub változások sikeresen ráillesztve.");
+
+        // Stash pop
+        if (stashed) {
+          try {
+            addLog("attila_tech", "Attila", "system", "Lokális módosítások visszamásolása (git stash pop)...");
+            await execPromise("git stash pop");
+          } catch (popErr: any) {
+            addLog("attila_tech", "Attila", "system", "⚠️ Konfliktus a lokális fájlok visszatöltésekor. Egyedi beállítások megtartása...");
+            await execPromise("git checkout --theirs . || git checkout --ours . || true");
+            await execPromise("git stash drop || true");
+          }
+        }
+        updateSuccess = true;
+      } catch (gitErr: any) {
+        addLog("attila_tech", "Attila", "system", `⚠️ Git-alapú frissítés meghiúsult: ${gitErr.message || gitErr}. Átlépés ZIP-alapú közvetlen frissítő hurokra...`);
+      }
+    }
+
+    // ZIP alapú letöltési és kicsomagolási mechanizmus (Ha nem Git repo, vagy ha a Git pull meghiúsult)
+    if (!updateSuccess) {
+      addLog("attila_tech", "Attila", "system", "📦 Közvetlen ZIP letöltési hurok indítása a GitHubról (biztonságos online stabil verzió)...");
+      try {
+        await execPromise("curl -sL https://github.com/ngabika/NovaSwarm/archive/refs/heads/main.zip -o /tmp/novaswarm.zip || wget -q https://github.com/ngabika/NovaSwarm/archive/refs/heads/main.zip -O /tmp/novaswarm.zip");
+        await execPromise("unzip -o /tmp/novaswarm.zip -d /tmp/");
+        
+        let extractedDir = "NovaSwarm-main";
+        if (fs.existsSync("/tmp/NovaSwarm-main")) {
+          extractedDir = "NovaSwarm-main";
+        } else if (fs.existsSync("/tmp/NovaSwarm-master")) {
+          extractedDir = "NovaSwarm-master";
+        }
+        
+        addLog("attila_tech", "Attila", "system", "Legújabb szoftverfájlok beillesztése és felülírása...");
+        await execPromise(`cp -r /tmp/${extractedDir}/* .`);
+        await execPromise(`rm -rf /tmp/novaswarm.zip /tmp/${extractedDir}`);
+        
+        gitLog = "Közvetlen ZIP letöltés és kibontás sikeresen végrehajtva.";
+        updateSuccess = true;
+      } catch (zipErr: any) {
+        addLog("attila_tech", "Attila", "system", "❌ Direct ZIP fallback is failed.");
+        throw new Error(`Minden frissítési csatorna (Git és direct ZIP) meghiúsult. Részletek: ${zipErr.message}`);
+      }
     }
 
     // 3. NPM Install & Rebuild
