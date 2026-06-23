@@ -778,7 +778,40 @@ function loadDB() {
         }
       }
       
-      console.log("Database successfully loaded with default MCP/Skills upgrade check.");
+      // Cleanse openRouterModelPriority to ensure it does not contain deprecated/non-existent or safety models
+      if (state.settings.openRouterModelPriority) {
+        let parts = state.settings.openRouterModelPriority.split(",").map(p => p.trim()).filter(Boolean);
+        parts = parts.filter(p => {
+          const lp = p.toLowerCase();
+          return !lp.includes("safety") && 
+                 !lp.includes("moderation") && 
+                 !lp.includes("guard") && 
+                 !lp.includes("embed") && 
+                 !lp.includes("critic") && 
+                 !lp.includes("coder") && 
+                 !lp.includes("code-") && 
+                 !lp.includes("translation") && 
+                 !lp.includes("math") && 
+                 !lp.includes("dolphin-mistral-24b-venice-edition") && 
+                 !lp.includes("qwen3-next-80b-a3b-instruct") && 
+                 !lp.includes("nemotron-3-ultra-550b-a55b") && 
+                 !lp.includes("owl-alpha");
+        });
+        
+        // If empty or filtered too much, restore a robust default set
+        if (parts.length === 0) {
+          parts = [
+            "google/gemini-2.5-flash:free",
+            "meta-llama/llama-3.3-70b-instruct:free",
+            "deepseek/deepseek-r1:free",
+            "meta-llama/llama-3-8b-instruct:free"
+          ];
+        }
+        state.settings.openRouterModelPriority = parts.join(", ");
+        saveDB();
+      }
+
+      console.log("Database successfully loaded with default MCP/Skills upgrade check and OpenRouter models sanitized.");
     } else {
       state.agents = [];
       state.kanbanCards = defaultKanban;
@@ -1235,15 +1268,15 @@ let lastTelegramUpdateOffset = 0;
 let geminiKeyIndex = 0;
 function getActiveGeminiApiKey(): string | null {
   const keys: string[] = [];
-  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "MY_GEMINI_API_KEY" && !process.env.GEMINI_API_KEY.includes("MY_")) {
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "MY_GEMINI_API_KEY" && !process.env.GEMINI_API_KEY.includes("MY_") && process.env.GEMINI_API_KEY !== "HIDDEN" && process.env.GEMINI_API_KEY !== "********") {
     keys.push(process.env.GEMINI_API_KEY);
   }
-  if (state.settings.geminiApiKey && state.settings.geminiApiKey !== "MY_GEMINI_API_KEY" && !state.settings.geminiApiKey.includes("MY_")) {
+  if (state.settings.geminiApiKey && state.settings.geminiApiKey !== "MY_GEMINI_API_KEY" && !state.settings.geminiApiKey.includes("MY_") && state.settings.geminiApiKey !== "HIDDEN" && state.settings.geminiApiKey !== "********") {
     keys.push(state.settings.geminiApiKey);
   }
   if (state.settings.geminiApiKeysPool && Array.isArray(state.settings.geminiApiKeysPool)) {
     for (const k of state.settings.geminiApiKeysPool) {
-      if (k && k !== "MY_GEMINI_API_KEY" && !k.includes("MY_")) {
+      if (k && k !== "MY_GEMINI_API_KEY" && !k.includes("MY_") && k !== "HIDDEN" && k !== "********") {
         keys.push(k);
       }
     }
@@ -1257,15 +1290,15 @@ function getActiveGeminiApiKey(): string | null {
 let openRouterKeyIndex = 0;
 function getActiveOpenRouterApiKey(): string | null {
   const keys: string[] = [];
-  if (process.env.OPENROUTER_API_KEY) {
+  if (process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY !== "HIDDEN" && process.env.OPENROUTER_API_KEY !== "********") {
     keys.push(process.env.OPENROUTER_API_KEY);
   }
-  if (state.settings.openRouterApiKey) {
+  if (state.settings.openRouterApiKey && state.settings.openRouterApiKey !== "HIDDEN" && state.settings.openRouterApiKey !== "********") {
     keys.push(state.settings.openRouterApiKey);
   }
   if (state.settings.openRouterApiKeysPool && Array.isArray(state.settings.openRouterApiKeysPool)) {
     for (const k of state.settings.openRouterApiKeysPool) {
-      if (k) {
+      if (k && k !== "HIDDEN" && k !== "********") {
         keys.push(k);
       }
     }
@@ -3046,6 +3079,45 @@ app.post("/api/settings", (req, res) => {
   if (Array.isArray(newSet.openRouterApiKeysPool)) {
     newSet.openRouterApiKeysPool = newSet.openRouterApiKeysPool.filter((k: string) => k && k.trim() !== "");
   }
+
+  // Guard sensitive fields against "HIDDEN" or "********" values from UI settings
+  const sensitiveFields = ["geminiApiKey", "openRouterApiKey", "telegramBotToken", "binanceApiKey", "binanceApiSecret"];
+  for (const field of sensitiveFields) {
+    if (newSet[field] === "HIDDEN" || newSet[field] === "********") {
+      newSet[field] = state.settings[field];
+    }
+  }
+
+  // Sanitize the model priorities if supplied
+  if (newSet.openRouterModelPriority) {
+    let parts = newSet.openRouterModelPriority.split(",").map((p: string) => p.trim()).filter(Boolean);
+    parts = parts.filter((p: string) => {
+      const lp = p.toLowerCase();
+      return !lp.includes("safety") && 
+             !lp.includes("moderation") && 
+             !lp.includes("guard") && 
+             !lp.includes("embed") && 
+             !lp.includes("critic") && 
+             !lp.includes("coder") && 
+             !lp.includes("code-") && 
+             !lp.includes("translation") && 
+             !lp.includes("math") && 
+             !lp.includes("dolphin-mistral-24b-venice-edition") && 
+             !lp.includes("qwen3-next-80b-a3b-instruct") && 
+             !lp.includes("nemotron-3-ultra-550b-a55b") && 
+             !lp.includes("owl-alpha");
+    });
+    if (parts.length === 0) {
+      parts = [
+        "google/gemini-2.5-flash:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "deepseek/deepseek-r1:free",
+        "meta-llama/llama-3-8b-instruct:free"
+      ];
+    }
+    newSet.openRouterModelPriority = parts.join(", ");
+  }
+
   state.settings = { ...state.settings, ...newSet };
 
   const hasBinanceKeys = !!(state.settings.binanceApiKey && state.settings.binanceApiSecret);
