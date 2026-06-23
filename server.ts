@@ -781,22 +781,7 @@ function loadDB() {
       // Cleanse openRouterModelPriority to ensure it does not contain deprecated/non-existent or safety models
       if (state.settings.openRouterModelPriority) {
         let parts = state.settings.openRouterModelPriority.split(",").map(p => p.trim()).filter(Boolean);
-        parts = parts.filter(p => {
-          const lp = p.toLowerCase();
-          return !lp.includes("safety") && 
-                 !lp.includes("moderation") && 
-                 !lp.includes("guard") && 
-                 !lp.includes("embed") && 
-                 !lp.includes("critic") && 
-                 !lp.includes("coder") && 
-                 !lp.includes("code-") && 
-                 !lp.includes("translation") && 
-                 !lp.includes("math") && 
-                 !lp.includes("dolphin-mistral-24b-venice-edition") && 
-                 !lp.includes("qwen3-next-80b-a3b-instruct") && 
-                 !lp.includes("nemotron-3-ultra-550b-a55b") && 
-                 !lp.includes("owl-alpha");
-        });
+        parts = parts.filter(p => isModelAcceptable(p));
         
         // If empty or filtered too much, restore a robust default set
         if (parts.length === 0) {
@@ -1265,18 +1250,98 @@ detectConnectedDevices().catch(err => console.error("Hardware detection failed:"
 let heartbeatTimer: NodeJS.Timeout | null = null;
 let lastTelegramUpdateOffset = 0;
 
+// API Key validation helpers
+function isValidGeminiApiKey(key: string | undefined): boolean {
+  if (!key) return false;
+  const k = key.trim();
+  if (k === "HIDDEN" || k === "********" || k === "MY_GEMINI_API_KEY" || k.includes("MY_") || k.includes("YOUR_")) {
+    return false;
+  }
+  // Standard Google AI Studio API key starts with AIzaSy and is around 39 char
+  return k.startsWith("AIzaSy") && k.length >= 30;
+}
+
+function isValidOpenRouterApiKey(key: string | undefined): boolean {
+  if (!key) return false;
+  const k = key.trim();
+  if (k === "HIDDEN" || k === "********" || k.includes("MY_") || k.includes("YOUR_")) {
+    return false;
+  }
+  // Standard OpenRouter key starts with sk-
+  return k.startsWith("sk-") && k.length >= 15;
+}
+
+// Acceptable models helper to exclude corrupted, abandoned or Venice provider rate-limited models
+function isModelAcceptable(id: string | undefined): boolean {
+  if (!id) return false;
+  const lp = id.toLowerCase();
+  
+  if (lp.includes("safety") || 
+      lp.includes("moderation") || 
+      lp.includes("guard") || 
+      lp.includes("embed") || 
+      lp.includes("critic") || 
+      lp.includes("coder") || 
+      lp.includes("code-") || 
+      lp.includes("translation") || 
+      lp.includes("math") ||
+      lp.includes("vision") ||
+      lp.includes("filter") ||
+      lp.includes("clip") ||
+      lp.includes("preview") ||
+      lp.includes("lyria") ||
+      lp.includes("poolside") ||
+      lp.includes("laguna") ||
+      lp.includes("gemma-4")) {
+    return false;
+  }
+  
+  if (lp.includes("dolphin-mistral") ||
+      lp.includes("venice") ||
+      lp.includes("owl-alpha") ||
+      lp.includes("nemotron") ||
+      lp.includes("cohere") ||
+      lp.includes("qwen3-next") ||
+      lp.includes("qwen/qwen3") ||
+      lp.includes("nousresearch/hermes-3-llama-3.1-405b") ||
+      lp.includes("hermes-3-llama") ||
+      lp.includes("north-mini")) {
+    return false;
+  }
+  
+  return true;
+}
+
+// Temporary model failures blacklist for real-time fault tolerance
+const modelBlacklist = new Map<string, number>();
+
+function blacklistModel(model: string, durationMs = 1000 * 60 * 10) {
+  console.log(`🚫 blacklisting model ${model} temporarily due to API exception.`);
+  modelBlacklist.set(model, Date.now() + durationMs);
+}
+
+function isModelBlacklisted(model: string): boolean {
+  const expire = modelBlacklist.get(model);
+  if (!expire) return false;
+  if (Date.now() > expire) {
+    modelBlacklist.delete(model);
+    return false;
+  }
+  return true;
+}
+
 let geminiKeyIndex = 0;
 function getActiveGeminiApiKey(): string | null {
   const keys: string[] = [];
-  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "MY_GEMINI_API_KEY" && !process.env.GEMINI_API_KEY.includes("MY_") && process.env.GEMINI_API_KEY !== "HIDDEN" && process.env.GEMINI_API_KEY !== "********") {
+  if (process.env.GEMINI_API_KEY && isValidGeminiApiKey(process.env.GEMINI_API_KEY)) {
     keys.push(process.env.GEMINI_API_KEY);
   }
-  if (state.settings.geminiApiKey && state.settings.geminiApiKey !== "MY_GEMINI_API_KEY" && !state.settings.geminiApiKey.includes("MY_") && state.settings.geminiApiKey !== "HIDDEN" && state.settings.geminiApiKey !== "********") {
+  if (state.settings.geminiApiKey && isValidGeminiApiKey(state.settings.geminiApiKey)) {
     keys.push(state.settings.geminiApiKey);
   }
   if (state.settings.geminiApiKeysPool && Array.isArray(state.settings.geminiApiKeysPool)) {
     for (const k of state.settings.geminiApiKeysPool) {
-      if (k && k !== "MY_GEMINI_API_KEY" && !k.includes("MY_") && k !== "HIDDEN" && k !== "********") {
+      if (isValidGeminiApiKey(k)) {
         keys.push(k);
       }
     }
@@ -1290,15 +1355,15 @@ function getActiveGeminiApiKey(): string | null {
 let openRouterKeyIndex = 0;
 function getActiveOpenRouterApiKey(): string | null {
   const keys: string[] = [];
-  if (process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY !== "HIDDEN" && process.env.OPENROUTER_API_KEY !== "********") {
+  if (process.env.OPENROUTER_API_KEY && isValidOpenRouterApiKey(process.env.OPENROUTER_API_KEY)) {
     keys.push(process.env.OPENROUTER_API_KEY);
   }
-  if (state.settings.openRouterApiKey && state.settings.openRouterApiKey !== "HIDDEN" && state.settings.openRouterApiKey !== "********") {
+  if (state.settings.openRouterApiKey && isValidOpenRouterApiKey(state.settings.openRouterApiKey)) {
     keys.push(state.settings.openRouterApiKey);
   }
   if (state.settings.openRouterApiKeysPool && Array.isArray(state.settings.openRouterApiKeysPool)) {
     for (const k of state.settings.openRouterApiKeysPool) {
-      if (k && k !== "HIDDEN" && k !== "********") {
+      if (isValidOpenRouterApiKey(k)) {
         keys.push(k);
       }
     }
@@ -1370,18 +1435,7 @@ async function refreshFreeModelsAutomatically() {
           if (!isFreeId && !isFreePricing) return false;
           
           // Exclude specialized and helper models that are not general purpose LLMs
-          if (id.includes("safety") || 
-              id.includes("moderation") || 
-              id.includes("guard") || 
-              id.includes("embed") || 
-              id.includes("critic") || 
-              id.includes("coder") || 
-              id.includes("code-") || 
-              id.includes("translation") || 
-              id.includes("math")) {
-            return false;
-          }
-          return true;
+          return isModelAcceptable(m.id);
         });
 
         if (freeModels.length > 0) {
@@ -1397,7 +1451,7 @@ async function refreshFreeModelsAutomatically() {
             return scoreB - scoreA; // higher score first
           });
 
-          const ids = freeModels.map((m: any) => m.id);
+          const ids = freeModels.map((m: any) => m.id).filter(id => isModelAcceptable(id));
           console.log(`✨ OpenRouter-en talált aktív ingyenes modellek (szűrt és rendezett):`, ids);
           
           // Save and prioritize
@@ -1799,7 +1853,7 @@ async function generateContentWithRetry(
   // 3. Append native Gemini path
   if (ai) {
     geminiModels.forEach(gm => {
-      if (!channels.some(c => c.provider === 'gemini' && c.model === gm)) {
+      if (isModelAcceptable(gm) && !isModelBlacklisted(gm) && !channels.some(c => c.provider === 'gemini' && c.model === gm)) {
         channels.push({ provider: 'gemini', model: gm });
       }
     });
@@ -1808,10 +1862,29 @@ async function generateContentWithRetry(
   // 4. Append OpenRouter failover path
   if (openRouterKey) {
     openRouterModels.forEach(or => {
-      if (!channels.some(c => c.provider === 'openrouter' && c.model === or)) {
+      if (isModelAcceptable(or) && !isModelBlacklisted(or) && !channels.some(c => c.provider === 'openrouter' && c.model === or)) {
         channels.push({ provider: 'openrouter', model: or });
       }
     });
+  }
+
+  // If ALL models got blacklisted and we have no candidate channels, clear the blacklist for a best-effort try
+  if (channels.length === 0) {
+    modelBlacklist.clear();
+    if (ai) {
+      geminiModels.forEach(gm => {
+        if (isModelAcceptable(gm) && !channels.some(c => c.provider === 'gemini' && c.model === gm)) {
+          channels.push({ provider: 'gemini', model: gm });
+        }
+      });
+    }
+    if (openRouterKey) {
+      openRouterModels.forEach(or => {
+        if (isModelAcceptable(or) && !channels.some(c => c.provider === 'openrouter' && c.model === or)) {
+          channels.push({ provider: 'openrouter', model: or });
+        }
+      });
+    }
   }
 
   // 5. No ultimate automatic Ollama fallback at the bottom - we only use real active keys!
@@ -1933,6 +2006,7 @@ async function generateContentWithRetry(
         const fallbackMsg = `Hiba történt a(z) ${chan.provider} csatornán (${chan.model}) (${errMsg.slice(0, 100)}). Átnavigálás a következő alternatívára...`;
         console.warn(`${agentName}: ${fallbackMsg}`);
         addLog(agentId, agentName, "system", fallbackMsg);
+        blacklistModel(chan.model);
         break;
       }
     }
@@ -3091,22 +3165,7 @@ app.post("/api/settings", (req, res) => {
   // Sanitize the model priorities if supplied
   if (newSet.openRouterModelPriority) {
     let parts = newSet.openRouterModelPriority.split(",").map((p: string) => p.trim()).filter(Boolean);
-    parts = parts.filter((p: string) => {
-      const lp = p.toLowerCase();
-      return !lp.includes("safety") && 
-             !lp.includes("moderation") && 
-             !lp.includes("guard") && 
-             !lp.includes("embed") && 
-             !lp.includes("critic") && 
-             !lp.includes("coder") && 
-             !lp.includes("code-") && 
-             !lp.includes("translation") && 
-             !lp.includes("math") && 
-             !lp.includes("dolphin-mistral-24b-venice-edition") && 
-             !lp.includes("qwen3-next-80b-a3b-instruct") && 
-             !lp.includes("nemotron-3-ultra-550b-a55b") && 
-             !lp.includes("owl-alpha");
-    });
+    parts = parts.filter((p: string) => isModelAcceptable(p));
     if (parts.length === 0) {
       parts = [
         "google/gemini-2.5-flash:free",
