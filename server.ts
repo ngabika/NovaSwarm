@@ -312,6 +312,7 @@ let state = {
   mcpServers: [] as McpServer[],
   skills: [] as AgentSkill[],
   privilegeRequests: [] as PrivilegeRequest[],
+  keepNotes: [] as any[],
   hardwareStatus: null as HardwareStatus | null,
   settings: {
     geminiApiKey: "",
@@ -786,11 +787,11 @@ function loadDB() {
         // If empty or filtered too much, restore a robust default set
         if (parts.length === 0) {
           parts = [
-            "google/gemma-4-31b-it:free",
-            "google/gemma-4-26b-a4b-it:free",
-            "nousresearch/hermes-3-llama-3.1-405b:free",
-            "qwen/qwen3-next-80b-a3b-instruct:free",
+            "google/gemini-2.5-flash:free",
+            "deepseek/deepseek-r1:free",
             "meta-llama/llama-3.3-70b-instruct:free",
+            "qwen/qwen-2.5-7b-instruct:free",
+            "meta-llama/llama-3.1-8b-instruct:free",
             "meta-llama/llama-3.2-3b-instruct:free",
             "openrouter/free"
           ];
@@ -1441,22 +1442,22 @@ async function refreshFreeModelsAutomatically() {
 
         if (freeModels.length > 0) {
           // Sort to prioritize popular/known models
-          const stableKeywords = ["gemma-4-", "llama-3.3-", "llama-3.1-", "gemma-2-", "qwen-2.5-", "hermes-3-", "qwen3-next"];
+          const stableKeywords = ["gemini-2.5", "deepseek-r1", "llama-3.3-", "llama-3.1-", "gemma-2-", "qwen-2.5-", "hermes-3-"];
           const popularKeywords = ["llama", "qwen", "mistral", "phi"];
           freeModels.sort((a: any, b: any) => {
             const idA = (a.id || "").toLowerCase();
             const idB = (b.id || "").toLowerCase();
             
-            let scoreA = stableKeywords.filter(keyword => idA.includes(keyword)).length * 5;
+            let scoreA = stableKeywords.filter(keyword => idA.includes(keyword)).length * 10;
             scoreA += popularKeywords.filter(keyword => idA.includes(keyword)).length;
             if (idA.includes("gemini-2.5") || idA.includes("deepseek-r1")) {
-              scoreA -= 20;
+              scoreA += 30;
             }
             
-            let scoreB = stableKeywords.filter(keyword => idB.includes(keyword)).length * 5;
+            let scoreB = stableKeywords.filter(keyword => idB.includes(keyword)).length * 10;
             scoreB += popularKeywords.filter(keyword => idB.includes(keyword)).length;
             if (idB.includes("gemini-2.5") || idB.includes("deepseek-r1")) {
-              scoreB -= 20;
+              scoreB += 30;
             }
             
             return scoreB - scoreA; // higher score first
@@ -1831,11 +1832,11 @@ async function generateContentWithRetry(
   }
 
   let openRouterModels = [
-    "google/gemma-4-31b-it:free",
-    "google/gemma-4-26b-a4b-it:free",
-    "nousresearch/hermes-3-llama-3.1-405b:free",
-    "qwen/qwen3-next-80b-a3b-instruct:free",
+    "google/gemini-2.5-flash:free",
+    "deepseek/deepseek-r1:free",
     "meta-llama/llama-3.3-70b-instruct:free",
+    "qwen/qwen-2.5-7b-instruct:free",
+    "meta-llama/llama-3.1-8b-instruct:free",
     "meta-llama/llama-3.2-3b-instruct:free",
     "openrouter/free"
   ];
@@ -1843,11 +1844,11 @@ async function generateContentWithRetry(
     const userModels = state.settings.openRouterModelPriority.split(",").map(m => m.trim()).filter(Boolean);
     const combined = [...userModels];
     const robustDefaults = [
-      "google/gemma-4-31b-it:free",
-      "google/gemma-4-26b-a4b-it:free",
-      "nousresearch/hermes-3-llama-3.1-405b:free",
-      "qwen/qwen3-next-80b-a3b-instruct:free",
+      "google/gemini-2.5-flash:free",
+      "deepseek/deepseek-r1:free",
       "meta-llama/llama-3.3-70b-instruct:free",
+      "qwen/qwen-2.5-7b-instruct:free",
+      "meta-llama/llama-3.1-8b-instruct:free",
       "meta-llama/llama-3.2-3b-instruct:free",
       "openrouter/free"
     ];
@@ -3198,11 +3199,11 @@ app.post("/api/settings", (req, res) => {
     parts = parts.filter((p: string) => isModelAcceptable(p));
     if (parts.length === 0) {
       parts = [
-        "google/gemma-4-31b-it:free",
-        "google/gemma-4-26b-a4b-it:free",
-        "nousresearch/hermes-3-llama-3.1-405b:free",
-        "qwen/qwen3-next-80b-a3b-instruct:free",
+        "google/gemini-2.5-flash:free",
+        "deepseek/deepseek-r1:free",
         "meta-llama/llama-3.3-70b-instruct:free",
+        "qwen/qwen-2.5-7b-instruct:free",
+        "meta-llama/llama-3.1-8b-instruct:free",
         "meta-llama/llama-3.2-3b-instruct:free",
         "openrouter/free"
       ];
@@ -4253,6 +4254,74 @@ app.delete("/api/memories/:id", (req, res) => {
     res.json({ success: true, memories: state.memories });
   } else {
     res.status(404).json({ error: "Memory not found" });
+  }
+});
+
+// Google Keep Notes CRUD
+app.get("/api/keep", (req, res) => {
+  if (!state.keepNotes) {
+    state.keepNotes = [];
+  }
+  res.json({ success: true, notes: state.keepNotes });
+});
+
+app.post("/api/keep", (req, res) => {
+  const { title, content, color, isPinned } = req.body;
+  if (!state.keepNotes) {
+    state.keepNotes = [];
+  }
+  const newNote = {
+    id: `keep_${Date.now()}`,
+    title: title || "",
+    content: content || "",
+    color: color || "bg-slate-850",
+    isPinned: !!isPinned,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  state.keepNotes.push(newNote);
+  addLog("system", "System", "memory", `Google Keep jegyzet mentve: "${title || content}"`);
+  saveDB();
+  res.json({ success: true, notes: state.keepNotes });
+});
+
+app.put("/api/keep/:id", (req, res) => {
+  const { id } = req.params;
+  const { title, content, color, isPinned } = req.body;
+  if (!state.keepNotes) {
+    state.keepNotes = [];
+  }
+  const idx = state.keepNotes.findIndex(n => n.id === id);
+  if (idx !== -1) {
+    state.keepNotes[idx] = {
+      ...state.keepNotes[idx],
+      title: title !== undefined ? title : state.keepNotes[idx].title,
+      content: content !== undefined ? content : state.keepNotes[idx].content,
+      color: color !== undefined ? color : state.keepNotes[idx].color,
+      isPinned: isPinned !== undefined ? isPinned : state.keepNotes[idx].isPinned,
+      updatedAt: new Date().toISOString()
+    };
+    addLog("system", "System", "memory", `Google Keep jegyzet módosítva: "${state.keepNotes[idx].title}"`);
+    saveDB();
+    res.json({ success: true, notes: state.keepNotes });
+  } else {
+    res.status(404).json({ error: "Note not found" });
+  }
+});
+
+app.delete("/api/keep/:id", (req, res) => {
+  const { id } = req.params;
+  if (!state.keepNotes) {
+    state.keepNotes = [];
+  }
+  const note = state.keepNotes.find(n => n.id === id);
+  if (note) {
+    state.keepNotes = state.keepNotes.filter(n => n.id !== id);
+    addLog("system", "System", "memory", `Google Keep jegyzet törölve: "${note.title}"`);
+    saveDB();
+    res.json({ success: true, notes: state.keepNotes });
+  } else {
+    res.status(404).json({ error: "Note not found" });
   }
 });
 

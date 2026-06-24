@@ -178,6 +178,16 @@ export interface BinanceState {
   };
 }
 
+export interface KeepNote {
+  id: string;
+  title: string;
+  content: string;
+  color?: string;
+  isPinned?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DashboardState {
   agents: Agent[];
   kanbanCards: KanbanCard[];
@@ -194,4 +204,5 @@ export interface DashboardState {
   backups?: BackupItem[];
   otaUpdateAvailable?: boolean;
   otaLatestCommitInfo?: string;
+  keepNotes?: KeepNote[];
 }

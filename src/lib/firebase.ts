@@ -20,6 +20,9 @@ provider.addScope('https://www.googleapis.com/auth/tasks');
 provider.addScope('https://www.googleapis.com/auth/forms.body');
 provider.addScope('https://www.googleapis.com/auth/meetings.space.created');
 provider.addScope('https://www.googleapis.com/auth/contacts');
+provider.addScope('https://www.googleapis.com/auth/chat.messages');
+provider.addScope('https://www.googleapis.com/auth/chat.spaces');
+provider.addScope('https://www.googleapis.com/auth/chat.memberships');
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
